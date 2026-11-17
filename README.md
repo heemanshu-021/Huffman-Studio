@@ -189,10 +189,10 @@ The frontend will launch at `http://localhost:5173`. Open your browser and navig
 
 ## Development Roadmap
 
-See [docs/PHASES.md](docs/PHASES.md) for full phase details:
+See [docs/PHASES.md](docs/PHASES.md) and [docs/HUFFMAN-ALGORITHM.md](docs/HUFFMAN-ALGORITHM.md) for full details:
 - **Phase 1: Foundation and Architecture** *(Completed)*
-- **Phase 2: Huffman Core Algorithm Engine** *(Next)*
-- **Phase 3: Archive Specification & Binary File I/O**
+- **Phase 2: Huffman Core Algorithm Engine** *(Completed)*
+- **Phase 3: Archive Specification & Binary File I/O** *(Next)*
 - **Phase 4: RESTful API Layer & Spring Integration**
 - **Phase 5: Frontend Interactive Workflows**
 - **Phase 6: Tree Visualizer & Educational Walkthrough**
