@@ -190,6 +190,7 @@ For full details, headers, error responses, and cURL examples, see [docs/API-REF
 | `GET` | `/api/health` | *None* | `application/json` | System health status & version probe |
 | `POST` | `/api/compress` | `multipart/form-data` | `application/octet-stream` | Compresses `.txt` file into downloadable binary `.huf` with metrics in headers |
 | `POST` | `/api/decompress` | `multipart/form-data` | `text/plain; charset=UTF-8` | Decompresses `.huf` archive into restored `.txt` text file |
+| `POST` | `/api/analyze` | `application/json` \| `multipart/form-data` | `application/json` | Analyzes text or file for tree visualization, codes & frequencies |
 
 ---
 
@@ -200,7 +201,7 @@ See [docs/PHASES.md](docs/PHASES.md), [docs/API-REFERENCE.md](docs/API-REFERENCE
 - **Phase 2: Huffman Core Algorithm Engine** *(Completed)*
 - **Phase 3: Archive Specification & Binary File I/O** *(Completed)*
 - **Phase 4: RESTful API Layer & Spring Integration** *(Completed)*
-- **Phase 5: Frontend Interactive Workflows** *(Next)*
+- **Phase 5: Frontend Interactive Workflows & Full-Stack Integration** *(Completed)*
 - **Phase 6: Tree Visualizer & Educational Walkthrough**
 - **Phase 7: Testing, Benchmarking & Release Verification**
 

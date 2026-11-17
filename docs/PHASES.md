@@ -166,19 +166,27 @@ This document outlines the systematic, phased engineering roadmap for **Huffman 
 
 ---
 
-### Phase 5: Frontend Interactive Workflows
-* **Objective**: Build responsive user interfaces for compressing and decompressing files.
+### Phase 5: Frontend Interactive Workflows & Full-Stack Integration ✅ COMPLETED
+
+* **Objective**: Connect the React 18 TypeScript frontend to the real Java 21 Spring Boot backend for end-to-end compression, decompression, statistics analysis, and tree visualization.
+* **Status**: ✅ All deliverables completed, integrated, and verified against running backend.
 * **Key Deliverables**:
-  - Drag-and-drop file upload dropzone with size validation and text preview.
-  - Comprehensive compression results card:
-    - Original file size (Bytes / KB).
-    - Compressed file size (Bytes / KB).
-    - Space saved percentage (`(1 - compressed / original) * 100`).
-    - Compression ratio (`original / compressed`).
-  - Direct one-click download for `.huf` archives.
-  - Decompressor view with file upload, integrity check indicator, and recovered text preview / download.
+  - **Backend Analysis Endpoint (`POST /api/analyze`)**:
+    - `AnalysisController.java` & `AnalysisApiService.java` emitting `TreeNodeDto`, character frequencies, code tables, and entropy metrics.
+    - 9 MockMvc integration tests; backend test suite now totals **188 passing tests**.
+  - **Client API & Services Layer**:
+    - `apiClient.ts` with custom `X-*` header parsers, RFC 5987 / standard `Content-Disposition` filename extractor, and structured `ApiErrorResponse`.
+    - `compressionService.ts` calling `POST /api/compress` and managing `.huf` binary downloads.
+    - `decompressionService.ts` calling `POST /api/decompress` and recovering original text.
+    - `analysisService.ts` calling `POST /api/analyze` for JSON text or multipart file analysis.
+  - **Interactive Application Pages**:
+    - `CompressorPage.tsx`: Drag-and-drop file upload, UTF-8 text validation, 50MB limit, Java compression execution, immediate `.huf` download, full metrics card, and honest container overhead notice for negative savings on small inputs.
+    - `DecompressorPage.tsx`: Drag-and-drop `.huf` archive upload, CRC-32 integrity validation, monospace restored text preview with copy-to-clipboard, and `.txt` file download.
+    - `VisualizerPage.tsx`: Interactive SVG binary tree with deterministic coordinate layout, bit badges (`0` left, `1` right), active root-to-leaf path tracing on hover, code search table, and Recharts frequency chart.
+    - `DashboardPage.tsx`: Live backend connectivity card with `/api/health` status ping, session activity analytics with `useSessionStats` tracking aggregate net bytes saved across the session.
 * **Quality Gate**:
-  - Seamless end-to-end browser testing against running Spring Boot backend.
+  - `tsc -b && vite build` compiles cleanly with 0 errors.
+  - End-to-end verification confirms 0-byte difference (`cmp`) on recovered text files across English prose, large text, and multi-byte Unicode (Hindi + emojis).
 
 ---
 

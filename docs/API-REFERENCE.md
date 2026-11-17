@@ -41,6 +41,7 @@ This document provides complete, production-grade documentation for the **Huffma
 | `GET` | `/api/health` | *None* | `application/json` | Health check & readiness probe |
 | `POST` | `/api/compress` | `multipart/form-data` | `application/octet-stream` | Compresses a `.txt` file into binary `.huf` |
 | `POST` | `/api/decompress` | `multipart/form-data` | `text/plain; charset=UTF-8` | Decompresses a `.huf` archive into `.txt` |
+| `POST` | `/api/analyze` | `application/json` \| `multipart/form-data` | `application/json` | Analyzes text or file for tree visualization, codes & frequencies |
 
 ---
 
@@ -157,6 +158,103 @@ Accepts an authentic `.huf` binary archive, reconstructs the Huffman decoding tr
 curl -X POST http://localhost:8080/api/decompress \
   -F "file=@sample.huf" \
   -o recovered.txt
+```
+
+---
+
+### 3.4 Analyze Text or File
+
+```http
+POST /api/analyze
+```
+
+Analyzes raw text or an uploaded text file using the pure Java Huffman engine. Computes code-point frequencies, builds the deterministic prefix tree, generates the prefix-free code table, and emits a hierarchical JSON tree model for interactive frontend visualization.
+
+#### Request Formats
+
+**1. JSON Request:**
+- **Content-Type**: `application/json`
+- **Body**:
+```json
+{
+  "text": "ABRACADABRA"
+}
+```
+
+**2. Multipart Request:**
+- **Content-Type**: `multipart/form-data`
+- **Parameters**: `file` (`MultipartFile`) or `text` (form text field)
+
+#### Response (`200 OK`)
+- **Content-Type**: `application/json`
+- **Body Schema**:
+```json
+{
+  "originalText": "ABRACADABRA",
+  "characterCount": 11,
+  "uniqueCharacterCount": 5,
+  "originalByteSize": 11,
+  "encodedBitCount": 23,
+  "encodedByteCount": 3,
+  "compressionRatio": 3.6667,
+  "percentageSaved": 72.73,
+  "encodedBitString": "01101001110011110110100",
+  "frequencies": [
+    {
+      "codePoint": 65,
+      "character": "A",
+      "displayCharacter": "A",
+      "frequency": 5,
+      "percentage": 45.45
+    }
+  ],
+  "codeTable": [
+    {
+      "codePoint": 65,
+      "character": "A",
+      "displayCharacter": "A",
+      "code": "0",
+      "bitLength": 1,
+      "frequency": 5
+    }
+  ],
+  "tree": {
+    "id": "node-1",
+    "frequency": 11,
+    "codePoint": null,
+    "character": "",
+    "displayCharacter": "[Internal]",
+    "isLeaf": false,
+    "code": "",
+    "left": {
+      "id": "node-2",
+      "frequency": 5,
+      "codePoint": 65,
+      "character": "A",
+      "displayCharacter": "A",
+      "isLeaf": true,
+      "code": "0",
+      "left": null,
+      "right": null
+    },
+    "right": {
+      "id": "node-3",
+      "frequency": 6,
+      "codePoint": null,
+      "character": "",
+      "displayCharacter": "[Internal]",
+      "isLeaf": false,
+      "code": "1"
+    }
+  }
+}
+```
+
+#### Example cURL
+```bash
+curl -X POST http://localhost:8080/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Huffman Studio 2026"}'
 ```
 
 ---

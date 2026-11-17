@@ -362,3 +362,51 @@ Client (Vite React / curl / Postman)
 - **CORS Configuration**: Explicitly permits Vite (`localhost:5173`, `127.0.0.1:5173`, `localhost:3000`) and exposes all custom `X-*` statistics headers.
 - **Zero In-Memory Leakage**: Decompression reconstructs trees directly from archive bytes without referencing session cache or previous compression state.
 
+---
+
+## 10. Frontend Architecture & Full-Stack Integration (Phase 5)
+
+Phase 5 connects the React 18 TypeScript frontend to the real Spring Boot backend with zero mock data.
+
+```
+React View Layer (Pages & Components)
+   ├── CompressorPage.tsx       (drag-and-drop upload, real-time compression, .huf download)
+   ├── DecompressorPage.tsx     (archive upload, CRC32 check, text preview, .txt download)
+   ├── VisualizerPage.tsx       (interactive SVG tree layout, code table, Recharts bar chart)
+   └── DashboardPage.tsx        (live health probe, session metrics, operation history)
+            │
+            ▼
+Service Layer (`frontend/src/services`)
+   ├── apiClient.ts             (central fetch client, header parser, error mapper)
+   ├── compressionService.ts    (POST /api/compress, blob download utility)
+   ├── decompressionService.ts  (POST /api/decompress)
+   └── analysisService.ts       (POST /api/analyze: text and file analysis)
+            │
+            ▼
+Custom Hooks & State (`frontend/src/hooks`)
+   ├── useHealthCheck.ts        (polling / manual ping of /api/health)
+   └── useSessionStats.ts       (sessionStorage persistence of compression history)
+            │
+            ▼
+REST Boundary (Spring Boot @ http://localhost:8080)
+   ├── POST /api/compress       (streams application/octet-stream + X-* metrics)
+   ├── POST /api/decompress     (streams text/plain + X-* metrics)
+   ├── POST /api/analyze        (emits JSON TreeNode hierarchy & code tables)
+   └── GET  /api/health         (emits system status, uptime & version)
+```
+
+### 10.1 Key Frontend Engineering Highlights
+
+1. **Backend Analysis Endpoint (`POST /api/analyze`)**:
+   - `AnalysisController` & `AnalysisApiService` generate hierarchical `TreeNodeDto` trees, frequency distributions, and prefix codes directly from backend algorithm classes (`HuffmanCompressor`, `HuffmanTreeBuilder`).
+2. **Transparent Metrics & Container Overhead Notice**:
+   - Accurately parses `X-*` response headers (`X-Original-Bytes`, `X-Archive-Bytes`, `X-Bytes-Saved`, `X-Payload-Bits`, `X-Tree-Bytes`, `X-Header-Bytes`).
+   - Educational notice displayed when `bytesSaved < 0` for small files explaining self-contained container overhead.
+3. **Interactive Tree Visualization**:
+   - Computes deterministic node coordinates using subtree widths and depth spacing.
+   - SVG viewport renders roots, internal nodes with frequency sums, and leaves with characters and codes.
+   - Hovering code table entries traces the exact root-to-leaf binary branch in real time.
+4. **Session-Level Analytics**:
+   - `useSessionStats` tracks all operations within `sessionStorage`, computing aggregate net bytes saved and compression throughput across the session without server-side persistence.
+
+
