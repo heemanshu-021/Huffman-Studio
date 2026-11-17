@@ -316,3 +316,49 @@ The archive contains the full Huffman coding tree encoded in its binary structur
 - **Safety limits** (`MAX_TREE_NODES`, `MAX_TREE_DEPTH`, `MAX_BIT_COUNT`, `MAX_ARCHIVE_BYTES`) protect against maliciously crafted archives causing memory exhaustion or stack overflow.
 - **Zero-padding validation**: padding bits in the last payload byte must be zero; non-zero padding indicates corruption.
 
+---
+
+## 9. REST API & HTTP File Handling Architecture (Phase 4)
+
+Phase 4 exposes the core Huffman engine and archive serialization services through production-grade REST endpoints.
+
+```
+Client (Vite React / curl / Postman)
+       |
+       | HTTP POST multipart/form-data
+       v
++------------------------------------------------------------------------+
+| Controller Tier (`com.huffmanstudio.controller`)                       |
+| - CompressionController (`POST /api/compress`)                        |
+| - DecompressionController (`POST /api/decompress`)                    |
+| - HealthController (`GET /api/health`)                                 |
++-----------------------------------+------------------------------------+
+                                    |
+                                    v
++------------------------------------------------------------------------+
+| Service Tier (`com.huffmanstudio.service`)                             |
+| - CompressionApiService: strict UTF-8 validation, path sanitization   |
+| - DecompressionApiService: archive integrity check & format validation|
+| - HealthService: backend health & version payload                      |
++-----------------------------------+------------------------------------+
+                                    |
+                                    v
++------------------------------------------------------------------------+
+| Archive & Model Tier (`com.huffmanstudio.archive`, `model`)            |
+| - HuffmanArchiveService: in-memory archive assembly / extraction       |
+| - ArchiveStatistics: honest metrics (original, archive, saved, ratio)  |
++------------------------------------------------------------------------+
+```
+
+### 9.1 Controllers & Endpoints
+- `CompressionController` (`POST /api/compress`): Streams binary `.huf` with full `X-*` statistics headers.
+- `DecompressionController` (`POST /api/decompress`): Streams restored UTF-8 `.txt` file with byte fidelity.
+- `HealthController` (`GET /api/health`): Preserved health probe returning JSON status.
+
+### 9.2 Validation & Security Invariants
+- **File Extensions**: Only `.txt` accepted for compression; only `.huf` accepted for decompression.
+- **Strict UTF-8**: Rejects malformed UTF-8 byte sequences with `422 Unprocessable Entity` rather than silently substituting replacement characters.
+- **Path Traversal Protection**: All client-supplied filenames are sanitized to prevent directory traversal attacks before being used in `Content-Disposition`.
+- **CORS Configuration**: Explicitly permits Vite (`localhost:5173`, `127.0.0.1:5173`, `localhost:3000`) and exposes all custom `X-*` statistics headers.
+- **Zero In-Memory Leakage**: Decompression reconstructs trees directly from archive bytes without referencing session cache or previous compression state.
+

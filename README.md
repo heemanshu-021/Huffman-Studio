@@ -92,6 +92,7 @@ Huffman-Studio/
 │   ├── tsconfig.json               # TypeScript compiler options
 │   └── vite.config.ts              # Vite bundler configuration
 ├── docs/                           # Architectural & Phase Documentation
+│   ├── API-REFERENCE.md            # REST API reference and cURL examples (Phase 4)
 │   ├── ARCHITECTURE.md             # Layer responsibilities and archive spec
 │   ├── HUF-ARCHIVE-FORMAT.md       # Binary .huf format specification (Phase 3)
 │   ├── HUFFMAN-ALGORITHM.md        # Huffman algorithm deep-dive (Phase 2)
@@ -180,24 +181,26 @@ The frontend will launch at `http://localhost:5173`. Open your browser and navig
 
 ## API Documentation
 
-### Phase 1 Endpoints
+For full details, headers, error responses, and cURL examples, see [docs/API-REFERENCE.md](docs/API-REFERENCE.md).
 
-| Method | Endpoint | Description | Sample Output |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/health` | Verifies backend connectivity and version | `{"status":"UP","message":"...","version":"1.0.0"}` |
+### Core Endpoints
 
-*(Future compression, decompression, and tree visualization endpoints will be released in subsequent phases.)*
+| Method | Endpoint | Consumes | Produces | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/health` | *None* | `application/json` | System health status & version probe |
+| `POST` | `/api/compress` | `multipart/form-data` | `application/octet-stream` | Compresses `.txt` file into downloadable binary `.huf` with metrics in headers |
+| `POST` | `/api/decompress` | `multipart/form-data` | `text/plain; charset=UTF-8` | Decompresses `.huf` archive into restored `.txt` text file |
 
 ---
 
 ## Development Roadmap
 
-See [docs/PHASES.md](docs/PHASES.md), [docs/HUFFMAN-ALGORITHM.md](docs/HUFFMAN-ALGORITHM.md), and [docs/HUF-ARCHIVE-FORMAT.md](docs/HUF-ARCHIVE-FORMAT.md) for full details:
+See [docs/PHASES.md](docs/PHASES.md), [docs/API-REFERENCE.md](docs/API-REFERENCE.md), [docs/HUF-ARCHIVE-FORMAT.md](docs/HUF-ARCHIVE-FORMAT.md), and [docs/HUFFMAN-ALGORITHM.md](docs/HUFFMAN-ALGORITHM.md) for full details:
 - **Phase 1: Foundation and Architecture** *(Completed)*
 - **Phase 2: Huffman Core Algorithm Engine** *(Completed)*
 - **Phase 3: Archive Specification & Binary File I/O** *(Completed)*
-- **Phase 4: RESTful API Layer & Spring Integration** *(Next)*
-- **Phase 5: Frontend Interactive Workflows**
+- **Phase 4: RESTful API Layer & Spring Integration** *(Completed)*
+- **Phase 5: Frontend Interactive Workflows** *(Next)*
 - **Phase 6: Tree Visualizer & Educational Walkthrough**
 - **Phase 7: Testing, Benchmarking & Release Verification**
 

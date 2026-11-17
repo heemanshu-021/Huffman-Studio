@@ -136,14 +136,33 @@ This document outlines the systematic, phased engineering roadmap for **Huffman 
 
 ---
 
-### Phase 4: RESTful API Layer & Spring Integration
-* **Objective**: Expose the core Huffman engine through clean, documented REST endpoints.
+### Phase 4: RESTful API Layer & Spring Integration ✅ COMPLETED
+
+* **Objective**: Connect the core Huffman engine and binary `.huf` archive system to production-grade REST APIs supporting real file uploads and downloads.
+* **Status**: ✅ All endpoints, services, validation rules, CORS headers, and tests completed.
 * **Endpoints**:
-  - `POST /api/compress`: Accepts multipart text file, returns binary `.huf` stream or detailed metadata JSON containing encoded size, compression ratio, space saving %, and execution duration.
-  - `POST /api/decompress`: Accepts `.huf` binary upload, validates header, recovers original text payload.
-  - `POST /api/analyze`: Generates frequency table, code mapping table, and serialized tree hierarchy for visualization without triggering file downloads.
-* **Quality Gate**:
-  - MockMvc controller tests for multipart uploads, validation errors, and invalid archive payloads.
+  - `GET /api/health`: Health status probe returning operational status and application version.
+  - `POST /api/compress`: Accepts multipart `.txt` file, strictly validates UTF-8, generates real `.huf` binary stream with `HUFN` magic, and exposes full `X-*` statistics headers.
+  - `POST /api/decompress`: Accepts multipart `.huf` file, validates archive structure and CRC32 checksum, reconstructs Huffman tree independently, and streams recovered `.txt` text file.
+* **Controllers & Services**:
+  - `CompressionController.java` (`com.huffmanstudio.controller`)
+  - `DecompressionController.java` (`com.huffmanstudio.controller`)
+  - `CompressionApiService.java` (`com.huffmanstudio.service`)
+  - `DecompressionApiService.java` (`com.huffmanstudio.service`)
+* **Security & Validation**:
+  - Strict UTF-8 validation (rejects malformed UTF-8 with 422 Unprocessable Entity).
+  - Path traversal protection (sanitizes all filenames before `Content-Disposition` generation).
+  - Extension enforcement (`.txt` for compress, `.huf` for decompress).
+  - Empty multipart & missing parameter detection (400 Bad Request).
+  - File size limits (50MB threshold).
+* **Statistics Headers Exposed via CORS**:
+  - `X-Original-Bytes`, `X-Archive-Bytes`, `X-Payload-Bits`, `X-Payload-Bytes`, `X-Tree-Bytes`, `X-Header-Bytes`, `X-Bytes-Saved`, `X-Compression-Ratio`, `X-Percentage-Saved`.
+* **Tests**:
+  - `CompressionControllerTest.java` (13 tests)
+  - `DecompressionControllerTest.java` (12 tests)
+  - `HealthControllerTest.java` (1 test)
+  - Total backend tests: 179 passed, 0 failures, 0 errors.
+* **Documentation**: `docs/API-REFERENCE.md`.
 
 ---
 
