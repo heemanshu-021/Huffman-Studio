@@ -10,6 +10,8 @@ export interface HealthResponse {
 }
 
 export interface ApiError {
+  success?: boolean;
+  errorCode?: string;
   status: number;
   error: string;
   message: string;
