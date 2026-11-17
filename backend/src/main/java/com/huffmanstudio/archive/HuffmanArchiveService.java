@@ -43,8 +43,49 @@ public class HuffmanArchiveService {
     private final HuffmanArchiveReader archiveReader = new HuffmanArchiveReader();
 
     // =========================================================================
+    // Result Records for In-Memory Archive Operations
+    // =========================================================================
+
+    /**
+     * Encapsulates the compressed archive bytes and associated compression statistics.
+     *
+     * @param archiveBytes the complete binary .huf archive
+     * @param statistics   the calculated archive statistics
+     */
+    public record CompressionResult(byte[] archiveBytes, ArchiveStatistics statistics) {}
+
+    /**
+     * Encapsulates the decompressed text string and associated archive statistics.
+     *
+     * @param text       the restored text string
+     * @param statistics the archive statistics computed from the decompressed content
+     */
+    public record DecompressionResult(String text, ArchiveStatistics statistics) {}
+
+    // =========================================================================
     // Compression
     // =========================================================================
+
+    /**
+     * Compresses a text string and returns both the binary archive and its compression statistics.
+     *
+     * @param text the original text to compress (empty or null produces an empty archive)
+     * @return {@link CompressionResult} containing archive bytes and complete statistics
+     * @throws IOException if archive assembly fails
+     */
+    public CompressionResult compressTextWithStatistics(String text) throws IOException {
+        if (text == null || text.isEmpty()) {
+            HuffmanResult emptyResult = HuffmanResult.empty();
+            byte[] archiveBytes = archiveWriter.writeToBytes(emptyResult, "");
+            ArchiveStatistics statistics = ArchiveStatistics.calculate("", archiveBytes, 0, 0);
+            return new CompressionResult(archiveBytes, statistics);
+        }
+
+        HuffmanResult result = HuffmanCompressor.compress(text);
+        byte[] archiveBytes = archiveWriter.writeToBytes(result, text);
+        ArchiveStatistics statistics = buildArchiveStatistics(text, result, archiveBytes);
+        return new CompressionResult(archiveBytes, statistics);
+    }
 
     /**
      * Compresses a text string and returns the binary {@code .huf} archive as a byte array.
@@ -111,6 +152,36 @@ public class HuffmanArchiveService {
     // =========================================================================
     // Decompression
     // =========================================================================
+
+    /**
+     * Decompresses a {@code .huf} archive given as a byte array and returns both the restored
+     * text and archive statistics.
+     *
+     * @param archiveBytes the full archive content
+     * @return {@link DecompressionResult} containing restored text and statistics
+     * @throws IOException if archive decompression or integrity checks fail
+     */
+    public DecompressionResult decompressBytesWithStatistics(byte[] archiveBytes) throws IOException {
+        if (archiveBytes == null) {
+            throw new IllegalArgumentException("archiveBytes cannot be null");
+        }
+
+        HuffmanArchiveReader.ReadResult readResult = archiveReader.readFromBytes(archiveBytes);
+
+        if (readResult.isEmpty()) {
+            ArchiveStatistics stats = ArchiveStatistics.calculate("", archiveBytes, 0, 0);
+            return new DecompressionResult("", stats);
+        }
+
+        String restoredText = decodeAndVerify(readResult);
+        long payloadBits = readResult.metadata().encodedBitCount();
+        long treeBytes = archiveBytes.length
+                - ArchiveFormat.FIXED_HEADER_SIZE
+                - readResult.metadata().payloadByteCount();
+
+        ArchiveStatistics stats = ArchiveStatistics.calculate(restoredText, archiveBytes, payloadBits, Math.max(0, treeBytes));
+        return new DecompressionResult(restoredText, stats);
+    }
 
     /**
      * Decompresses a {@code .huf} archive given as an in-memory byte array and returns
