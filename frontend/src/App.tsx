@@ -7,21 +7,24 @@ import { DecompressorPage } from './pages/DecompressorPage';
 import { VisualizerPage } from './pages/VisualizerPage';
 import { HowItWorksPage } from './pages/HowItWorksPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { ToastProvider } from './components/ui/Toast';
 
 export const App: React.FC = () => {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="compress" element={<CompressorPage />} />
-          <Route path="decompress" element={<DecompressorPage />} />
-          <Route path="visualizer" element={<VisualizerPage />} />
-          <Route path="how-it-works" element={<HowItWorksPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="compress" element={<CompressorPage />} />
+            <Route path="decompress" element={<DecompressorPage />} />
+            <Route path="visualizer" element={<VisualizerPage />} />
+            <Route path="how-it-works" element={<HowItWorksPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   );
 };
 

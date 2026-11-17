@@ -1,9 +1,4 @@
 import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
-import { Card } from '../components/Card';
-import { compressionService } from '../services/compressionService';
-import { useSessionStats } from '../hooks/useSessionStats';
-import { CompressionResult } from '../types/compression';
-import { formatBytes } from '../utils/formatters';
 import {
   FileArchive,
   UploadCloud,
@@ -13,11 +8,24 @@ import {
   AlertTriangle,
   CheckCircle2,
   Info,
-  Loader2,
   HardDrive,
   Binary,
   Layers,
 } from 'lucide-react';
+import { compressionService } from '../services/compressionService';
+import { useSessionStats } from '../hooks/useSessionStats';
+import { useToast } from '../components/ui/Toast';
+import { CompressionResult } from '../types/compression';
+import { formatBytes } from '../utils/formatters';
+import { StepIndicator } from '../components/ui/StepIndicator';
+import { MetricCard } from '../components/ui/MetricCard';
+import { Button } from '../components/ui/Button';
+
+const STEPS = [
+  { label: 'Select', description: 'Choose text file' },
+  { label: 'Compress', description: 'Run Huffman engine' },
+  { label: 'Download', description: 'Save .huf archive' },
+];
 
 export const CompressorPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -28,12 +36,14 @@ export const CompressorPage: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { recordOperation } = useSessionStats();
+  const toast = useToast();
+
+  const currentStep = result ? 2 : selectedFile ? 1 : 0;
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   };
-
   const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
@@ -42,50 +52,38 @@ export const CompressorPage: React.FC = () => {
   const validateAndSetFile = (file: File) => {
     setError(null);
     setResult(null);
-
-    // Limit check: 50MB
     const MAX_SIZE = 50 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      setError(`File size (${formatBytes(file.size)}) exceeds the maximum allowed 50MB limit.`);
+      setError(`File size (${formatBytes(file.size)}) exceeds the 50 MB limit.`);
       return;
     }
-
     setSelectedFile(file);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      validateAndSetFile(e.dataTransfer.files[0]);
-    }
+    if (e.dataTransfer.files?.length) validateAndSetFile(e.dataTransfer.files[0]);
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      validateAndSetFile(e.target.files[0]);
-    }
+    if (e.target.files?.length) validateAndSetFile(e.target.files[0]);
   };
 
   const clearSelection = () => {
     setSelectedFile(null);
     setError(null);
     setResult(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleCompress = async () => {
     if (!selectedFile) return;
-
     setIsCompressing(true);
     setError(null);
-
     try {
       const res = await compressionService.compressFile(selectedFile);
       setResult(res);
-
       recordOperation({
         type: 'COMPRESS',
         fileName: selectedFile.name,
@@ -94,13 +92,12 @@ export const CompressorPage: React.FC = () => {
         ratio: res.stats.compressionRatio,
         savingsPercent: res.stats.percentageSaved,
       });
-
-      // Automatically trigger download of the .huf archive
       compressionService.downloadBlob(res.blob, res.filename);
+      toast.success('Archive created!', `${res.filename} has been downloaded.`);
     } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'An unexpected error occurred during compression.';
-      setError(errorMessage);
+      const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      setError(msg);
+      toast.error('Compression failed', msg);
     } finally {
       setIsCompressing(false);
     }
@@ -112,24 +109,27 @@ export const CompressorPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="border-b border-slate-800 pb-4">
-        <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2.5">
-          <FileArchive className="w-6 h-6 text-emerald-400" />
-          Text File Compressor
-        </h2>
-        <p className="text-sm text-slate-400 mt-1">
+      <div>
+        <div className="flex items-center gap-2.5 mb-1">
+          <FileArchive className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-xl font-bold text-slate-100">Text File Compressor</h2>
+        </div>
+        <p className="text-sm text-slate-400">
           Upload plain text files to generate genuine bit-packed{' '}
-          <code className="text-emerald-400 font-mono">.huf</code> archives with custom binary headers.
+          <code className="text-emerald-400 font-mono text-xs">.huf</code> archives.
         </p>
       </div>
 
+      {/* Step indicator */}
+      <StepIndicator steps={STEPS} currentStep={currentStep} className="max-w-lg" />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Upload & Actions */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            {/* Hidden File Input */}
+        {/* Main column */}
+        <div className="lg:col-span-2 space-y-5">
+          {/* Upload card */}
+          <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5">
             <input
               type="file"
               ref={fileInputRef}
@@ -146,262 +146,259 @@ export const CompressorPage: React.FC = () => {
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
                   isDragging
-                    ? 'border-emerald-400 bg-emerald-500/10 scale-[1.01]'
+                    ? 'border-emerald-400 bg-emerald-500/8 scale-[1.01]'
                     : 'border-slate-700 hover:border-emerald-500/50 hover:bg-slate-900/40'
                 }`}
               >
                 <UploadCloud
-                  className={`w-12 h-12 mx-auto mb-3 transition-colors ${
-                    isDragging ? 'text-emerald-400' : 'text-slate-500'
+                  className={`w-10 h-10 mx-auto mb-3 transition-colors ${
+                    isDragging ? 'text-emerald-400' : 'text-slate-600'
                   }`}
                 />
-                <h3 className="text-base font-semibold text-slate-200">
+                <h3 className="text-sm font-semibold text-slate-200">
                   {isDragging ? 'Drop file to upload' : 'Drag & drop text file here'}
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Supports UTF-8 encoded files (.txt, .md, .json, source files) up to 50MB
+                <p className="text-xs text-slate-500 mt-1 mb-5">
+                  Supports UTF-8 encoded files (.txt, .md, .json, source files) up to 50 MB
                 </p>
-                <div className="mt-6">
-                  <button
-                    type="button"
-                    className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-lg shadow-emerald-900/30"
-                  >
-                    Browse Files
-                  </button>
-                </div>
+                <Button variant="primary" size="sm">
+                  Browse Files
+                </Button>
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* File Details Bar */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900/80 border border-slate-700/60">
+              <div className="space-y-5">
+                <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/60 border border-slate-700/50">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-                      <FileText className="w-5 h-5" />
+                    <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
+                      <FileText className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <h4 className="text-sm font-semibold text-slate-100 truncate">
+                      <p className="text-sm font-semibold text-slate-100 truncate">
                         {selectedFile.name}
-                      </h4>
-                      <p className="text-xs text-slate-400 font-mono">
-                        {formatBytes(selectedFile.size)} &bull; {selectedFile.type || 'text/plain'}
+                      </p>
+                      <p className="text-xs text-slate-500 font-mono">
+                        {formatBytes(selectedFile.size)} · {selectedFile.type || 'text/plain'}
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={clearSelection}
                     disabled={isCompressing}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                    title="Remove file"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors disabled:opacity-40"
+                    aria-label="Remove file"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* Compress Button */}
-                <button
+                <Button
+                  variant="primary"
+                  size="lg"
                   onClick={handleCompress}
                   disabled={isCompressing}
-                  className="w-full py-3 px-4 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30"
+                  loading={isCompressing}
+                  leftIcon={<FileArchive className="w-4 h-4" />}
+                  className="w-full"
                 >
-                  {isCompressing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                      Compressing with Java Engine...
-                    </>
-                  ) : (
-                    <>
-                      <FileArchive className="w-4 h-4" />
-                      Compress to .huf Archive
-                    </>
-                  )}
-                </button>
+                  {isCompressing ? 'Compressing with Java Engine…' : 'Compress to .huf Archive'}
+                </Button>
               </div>
             )}
 
-            {/* Error Notification */}
             {error && (
-              <div className="mt-4 p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 flex items-start gap-3 text-xs text-rose-300">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="font-semibold text-rose-200">Compression Error</span>
-                  <p className="leading-relaxed">{error}</p>
+              <div className="mt-4 p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/50 flex items-start gap-3">
+                <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-rose-200">Compression Error</p>
+                  <p className="text-xs text-rose-300 mt-0.5 leading-relaxed">{error}</p>
                 </div>
               </div>
             )}
-          </Card>
+          </div>
 
-          {/* Results Card */}
+          {/* Results */}
           {result && (
-            <Card
-              title="Compression Complete"
-              subtitle={`Archive: ${result.filename}`}
-              headerAction={
-                <button
+            <div className="rounded-xl border border-emerald-500/20 bg-[#14141c] p-5 space-y-5 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-sm font-semibold text-slate-100">Compression Complete</h3>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={handleManualDownload}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                  leftIcon={<Download className="w-3.5 h-3.5" />}
                 >
-                  <Download className="w-3.5 h-3.5" />
                   Download .huf
-                </button>
-              }
-            >
-              <div className="space-y-6">
-                {/* Primary Metrics Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-700/50">
-                    <span className="text-xs text-slate-400">Original Size</span>
-                    <p className="text-lg font-mono font-bold text-slate-100 mt-1">
-                      {formatBytes(result.stats.originalBytes)}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-700/50">
-                    <span className="text-xs text-slate-400">Archive Size</span>
-                    <p className="text-lg font-mono font-bold text-emerald-400 mt-1">
-                      {formatBytes(result.stats.archiveBytes)}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-700/50">
-                    <span className="text-xs text-slate-400">Space Saved</span>
-                    <p
-                      className={`text-lg font-mono font-bold mt-1 ${
-                        result.stats.bytesSaved >= 0 ? 'text-emerald-400' : 'text-amber-400'
-                      }`}
-                    >
-                      {formatBytes(result.stats.bytesSaved)}
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-700/50">
-                    <span className="text-xs text-slate-400">Ratio</span>
-                    <p className="text-lg font-mono font-bold text-indigo-400 mt-1">
-                      {result.stats.compressionRatio > 0
-                        ? `${(result.stats.compressionRatio * 100).toFixed(1)}%`
-                        : 'N/A'}
+                </Button>
+              </div>
+
+              {/* Size comparison bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>Original: {formatBytes(result.stats.originalBytes)}</span>
+                  <span>Archive: {formatBytes(result.stats.archiveBytes)}</span>
+                </div>
+                <div className="h-2 rounded-full bg-slate-800 overflow-hidden flex">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (result.stats.archiveBytes / Math.max(result.stats.originalBytes, 1)) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500 text-center">
+                  Archive is{' '}
+                  {(
+                    (result.stats.archiveBytes / Math.max(result.stats.originalBytes, 1)) *
+                    100
+                  ).toFixed(1)}
+                  % of original size
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <MetricCard
+                  label="Original"
+                  value={formatBytes(result.stats.originalBytes)}
+                  accent="slate"
+                />
+                <MetricCard
+                  label="Archive"
+                  value={formatBytes(result.stats.archiveBytes)}
+                  accent="emerald"
+                />
+                <MetricCard
+                  label="Space Saved"
+                  value={formatBytes(result.stats.bytesSaved)}
+                  accent={result.stats.bytesSaved >= 0 ? 'emerald' : 'amber'}
+                />
+                <MetricCard
+                  label="Ratio"
+                  value={
+                    result.stats.compressionRatio > 0
+                      ? `${(result.stats.compressionRatio * 100).toFixed(1)}%`
+                      : 'N/A'
+                  }
+                  accent="indigo"
+                />
+              </div>
+
+              {result.stats.bytesSaved < 0 && (
+                <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/40 flex items-start gap-3">
+                  <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-300">Container Overhead Notice</p>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                      The archive is larger than the original. In genuine lossless compressors, the
+                      self-contained container overhead (29-byte header + tree serialization) exceeds
+                      bit savings on small inputs. As input size grows, compression efficiency scales
+                      rapidly.
                     </p>
                   </div>
                 </div>
+              )}
 
-                {/* Educational Notice for Small Files (Negative Savings) */}
-                {result.stats.bytesSaved < 0 && (
-                  <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/50 flex items-start gap-3 text-xs text-amber-200">
-                    <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-amber-300">Container Overhead Notice:</strong>
-                      <p className="mt-1 text-slate-300 leading-relaxed">
-                        The compressed archive is larger than the raw original text. In genuine
-                        lossless compressors, the self-contained container overhead (29-byte fixed
-                        header + serialized tree topology) exceeds bit savings on small inputs. As
-                        input text size grows, compression efficiency scales rapidly.
-                      </p>
+              <div className="border-t border-slate-800/60 pt-4 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Archive Binary Breakdown
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                  {[
+                    {
+                      icon: <HardDrive className="w-3.5 h-3.5" />,
+                      label: 'Header Metadata',
+                      value: `${result.stats.headerBytes}B (29B Fixed + ${result.stats.treeBytes}B Tree)`,
+                    },
+                    {
+                      icon: <Binary className="w-3.5 h-3.5" />,
+                      label: 'Encoded Payload',
+                      value: `${result.stats.payloadBits} bits (${result.stats.payloadBytes}B)`,
+                    },
+                    {
+                      icon: <Layers className="w-3.5 h-3.5" />,
+                      label: 'Tree Metadata',
+                      value: `${result.stats.treeBytes} Bytes`,
+                    },
+                    {
+                      icon: <FileText className="w-3.5 h-3.5" />,
+                      label: 'Percentage Saved',
+                      value: `${result.stats.percentageSaved.toFixed(2)}%`,
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/50 border border-slate-800"
+                    >
+                      <span className="text-slate-500 flex items-center gap-1.5">
+                        {item.icon}
+                        {item.label}
+                      </span>
+                      <span className="text-slate-200">{item.value}</span>
                     </div>
-                  </div>
-                )}
-
-                {/* Detailed Archive Breakdown */}
-                <div className="border-t border-slate-700/60 pt-4 space-y-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Archive Binary Breakdown
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/40 border border-slate-800">
-                      <span className="text-slate-400 flex items-center gap-1.5">
-                        <HardDrive className="w-3.5 h-3.5 text-slate-500" />
-                        Header Metadata
-                      </span>
-                      <span className="font-mono text-slate-200">
-                        {result.stats.headerBytes} B (29B Fixed + {result.stats.treeBytes}B Tree)
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/40 border border-slate-800">
-                      <span className="text-slate-400 flex items-center gap-1.5">
-                        <Binary className="w-3.5 h-3.5 text-slate-500" />
-                        Encoded Payload
-                      </span>
-                      <span className="font-mono text-slate-200">
-                        {result.stats.payloadBits} bits ({result.stats.payloadBytes} B)
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/40 border border-slate-800">
-                      <span className="text-slate-400 flex items-center gap-1.5">
-                        <Layers className="w-3.5 h-3.5 text-slate-500" />
-                        Tree Metadata
-                      </span>
-                      <span className="font-mono text-slate-200">
-                        {result.stats.treeBytes} Bytes
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/40 border border-slate-800">
-                      <span className="text-slate-400 flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-slate-500" />
-                        Percentage Saved
-                      </span>
-                      <span className="font-mono text-emerald-400">
-                        {result.stats.percentageSaved.toFixed(2)}%
-                      </span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
-            </Card>
+            </div>
           )}
         </div>
 
-        {/* Right Column: Specification & Guidance */}
-        <div className="space-y-6">
-          <Card title="How It Works" subtitle="True Bit-Level Compression">
-            <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
-              <p>
-                Huffman Studio never simulates compression. Your file undergoes genuine byte packing:
-              </p>
-              <ol className="list-decimal list-inside space-y-2 text-slate-400">
-                <li>
-                  <strong className="text-slate-200">Frequency Analysis:</strong> Each Unicode code
-                  point is counted to build optimal prefix codes.
+        {/* Right column */}
+        <div className="space-y-5">
+          <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              How It Works
+            </h4>
+            <ol className="space-y-3 text-xs text-slate-400">
+              {[
+                ['Frequency Analysis', 'Each Unicode code point counted for optimal prefix codes'],
+                ['Min-Heap Tree', 'Priority queue pairs lowest-frequency nodes'],
+                ['Bitstream Packing', 'Variable-length bits packed into real 8-bit bytes'],
+                ['Self-Contained Header', 'Tree + CRC-32 embedded in archive'],
+              ].map(([title, desc], i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-slate-200 font-medium">{title}</p>
+                    <p className="text-slate-500 mt-0.5">{desc}</p>
+                  </div>
                 </li>
-                <li>
-                  <strong className="text-slate-200">Min-Heap Tree:</strong> Deterministic priority
-                  queue pairs lowest-frequency nodes.
-                </li>
-                <li>
-                  <strong className="text-slate-200">Bitstream Packing:</strong> Variable-length bits
-                  are packed into authentic 8-bit bytes using <code className="text-emerald-400">BitWriter</code>.
-                </li>
-                <li>
-                  <strong className="text-slate-200">Self-Contained Header:</strong> Tree topology and
-                  CRC-32 are embedded so the archive can be decompressed anywhere.
-                </li>
-              </ol>
-
-              <div className="pt-3 border-t border-slate-700/50 flex items-center gap-2 text-emerald-400">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Zero cloud dependency &bull; Pure Java 21 engine</span>
-              </div>
+              ))}
+            </ol>
+            <div className="pt-2 border-t border-slate-800/50 flex items-center gap-1.5 text-emerald-400 text-xs">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Zero cloud dependency · Pure Java 21 engine
             </div>
-          </Card>
+          </div>
 
-          <Card title="Archive Format (.huf)" subtitle="Specification V1">
-            <div className="space-y-2 text-xs font-mono text-slate-300">
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-500">Magic Number</span>
-                <span className="text-emerald-400">HUFF (0x48554646)</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-500">Version</span>
-                <span className="text-slate-300">0x01</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-500">Header Size</span>
-                <span className="text-slate-300">29 Bytes Fixed</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-500">Integrity</span>
-                <span className="text-slate-300">CRC-32 IEEE 802.3</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Tree Serialization</span>
-                <span className="text-slate-300">Preorder Bit Sequence</span>
-              </div>
+          <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Archive Format (.huf v1)
+            </h4>
+            <div className="space-y-1 text-xs font-mono">
+              {[
+                ['Magic Number', '0x48554646 (HUFF)', true],
+                ['Version', '0x01', false],
+                ['Header Size', '29 Bytes Fixed', false],
+                ['Integrity', 'CRC-32 IEEE 802.3', false],
+                ['Tree Serial.', 'Preorder Bit Seq.', false],
+              ].map(([label, value, em]) => (
+                <div
+                  key={label as string}
+                  className="flex justify-between py-1.5 border-b border-slate-800/40 last:border-0"
+                >
+                  <span className="text-slate-500">{label}</span>
+                  <span className={em ? 'text-emerald-400' : 'text-slate-300'}>{value}</span>
+                </div>
+              ))}
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
