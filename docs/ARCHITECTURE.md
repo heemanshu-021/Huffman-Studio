@@ -237,3 +237,82 @@ Input Text String -------------> [HuffmanEncoder]                       |
 8. **`HuffmanCompressor` (`algorithm`)**:
    - Orchestrates the entire pipeline, returning an immutable `HuffmanResult`.
 
+---
+
+## 8. Binary Archive Engine Design (Phase 3)
+
+The archive layer lives in `com.huffmanstudio.archive` and `com.huffmanstudio.model.ArchiveStatistics`. It is fully decoupled from Spring MVC.
+
+### 8.1 Package: `com.huffmanstudio.archive`
+
+| Class | Responsibility |
+|---|---|
+| `ArchiveFormat` | Constants: magic bytes, field offsets, sizes, safety limits. No logic. |
+| `ArchiveMetadata` | Immutable record of the five header fields parsed from an archive. |
+| `BitWriter` | Packs individual bits into bytes, MSB-first. Tracks meaningful bit count. |
+| `BitReader` | Reads individual bits from a byte array, respecting the declared meaningful bit count. Never exposes padding bits. |
+| `HuffmanArchiveWriter` | Serializes a `HuffmanResult` into a `.huf` byte array or file. Uses atomic temp-file strategy for safe file writes. |
+| `HuffmanArchiveReader` | Reads and validates a `.huf` archive; reconstructs the Huffman tree; extracts payload bytes. |
+| `HuffmanArchiveService` | High-level orchestrator: `compressText`, `compressFile`, `decompressBytes`, `decompressFile`. |
+
+### 8.2 Archive Data Flow
+
+```
+Input Text
+     |
+     v
+[HuffmanCompressor.compress(text)]
+     |
+     v
+HuffmanResult ─────────────────────────────────────────┐
+(root, codeTable, encodedBitString, stats)             │
+     |                                                  │
+     v                                                  v
+[BitWriter]                                [HuffmanArchiveWriter.serializeTree(root)]
+  → packs bit string into bytes              → preorder DFS: 0x01+codePoint or 0x00
+     |                                                  │
+     v                                                  v
+payloadBytes                                       treeBytes
+     |                                                  │
+     └──────────────────── [write header] ──────────────┘
+                                  |
+                                  v
+                       .huf binary archive bytes
+```
+
+```
+.huf binary archive bytes
+     |
+     v
+[HuffmanArchiveReader.readFromBytes]
+  → validate magic, version, metadata limits
+  → readNode (preorder DFS, recursively reconstruct HuffmanNode tree)
+  → verify treeNodeCount, no duplicates, valid code points
+  → extract payloadBytes
+     |
+     v
+HuffmanArchiveReader.ReadResult {metadata, root, payloadBytes}
+     |
+     v
+[BitReader(payloadBytes, encodedBitCount).readAllBitsAsString()]
+     |
+     v
+[HuffmanDecoder.decode(bitString, root)]
+     |
+     v
+restoredText → verify CRC32 → verify codePointCount → ✓
+```
+
+### 8.3 Self-Contained Decompression Guarantee
+
+The archive contains the full Huffman coding tree encoded in its binary structure. Decompression requires **only the archive bytes** — no original frequency map, no in-memory `HuffmanResult`, no server session state. This makes `.huf` files portable across machines and JVM restarts.
+
+### 8.4 Key Design Decisions
+
+- **Big-endian byte order** for all multi-byte fields (matches Java `DataOutputStream` defaults).
+- **Preorder tree serialization**: root written first simplifies recursive deserialization — read a marker byte, then recurse for children.
+- **CRC32 integrity check** catches bit-flips in transit. The checksum covers the original UTF-8 bytes, not the archive bytes.
+- **Atomic file writes**: archives are written to a `.tmp` sibling file, then atomically moved to the destination, preventing partial writes from appearing at the target path.
+- **Safety limits** (`MAX_TREE_NODES`, `MAX_TREE_DEPTH`, `MAX_BIT_COUNT`, `MAX_ARCHIVE_BYTES`) protect against maliciously crafted archives causing memory exhaustion or stack overflow.
+- **Zero-padding validation**: padding bits in the last payload byte must be zero; non-zero padding indicates corruption.
+

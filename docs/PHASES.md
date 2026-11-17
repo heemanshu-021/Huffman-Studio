@@ -94,21 +94,45 @@ This document outlines the systematic, phased engineering roadmap for **Huffman 
 
 ---
 
-### Phase 3: Archive Specification & Binary File I/O
-* **Objective**: Define and implement a robust `.huf` file format that persists complete decompression metadata across application restarts.
-* **Archive Specification (`.huf`)**:
-  - **Magic Identifier**: 4-byte header (`HUFF`, `0x48 0x55 0x46 0x46`) to validate file format authenticity.
-  - **Version Flag**: 1 byte (`0x01`).
-  - **Padding Bits**: 1 byte indicating how many bits in the final byte of the payload are padding (`0–7`).
-  - **Header Metadata**: Serialized tree structure or compact frequency table.
-  - **Payload**: Packed variable-length bitstream representing the encoded text data.
-* **Edge Case Handling**:
-  - Empty files (0 bytes).
-  - Single-character files (e.g., "AAAAAA").
-  - Uniform frequency distributions.
-  - Corrupted headers or mismatched checksums.
-* **Quality Gate**:
-  - Round-trip fidelity tests: `original bytes == decompress(compress(original bytes))` for varied datasets.
+### Phase 3: Archive Specification & Binary File I/O ✅ COMPLETED
+
+* **Objective**: Implement a versioned, self-contained `.huf` binary archive format and a complete compression/decompression engine that operates on actual binary bytes.
+* **Status**: ✅ All deliverables implemented and all tests passing.
+* **Archive Format (`HUFN` v1)**:
+  - **Magic**: 4 bytes `HUFN` (`0x48 0x55 0x46 0x4E`).
+  - **Version**: 1 byte `0x01`.
+  - **Original code-point count**: 8-byte big-endian long.
+  - **Meaningful encoded bit count**: 8-byte big-endian long.
+  - **Serialized tree node count**: 4-byte big-endian int.
+  - **CRC32 checksum** of original UTF-8 bytes: 4-byte big-endian unsigned int.
+  - **Serialized Huffman tree**: preorder DFS, `0x01`+codePoint for leaf, `0x00` for internal.
+  - **Packed binary payload**: MSB-first bit packing, zero-padded to byte boundary.
+* **New Classes (`com.huffmanstudio.archive`)**:
+  - `ArchiveFormat.java` — format constants, offsets, safety limits.
+  - `ArchiveMetadata.java` — immutable header record.
+  - `BitWriter.java` — MSB-first bit packer.
+  - `BitReader.java` — meaningful-bit-count-aware bit reader.
+  - `HuffmanArchiveWriter.java` — serializes `HuffmanResult` to `.huf` bytes/file.
+  - `HuffmanArchiveReader.java` — deserializes and validates `.huf` to tree + payload.
+  - `HuffmanArchiveService.java` — high-level compress/decompress API.
+* **New Model (`com.huffmanstudio.model`)**:
+  - `ArchiveStatistics.java` — complete archive-level compression metrics record.
+* **Edge Cases Handled**:
+  - Empty input: 29-byte header-only archive with all-zero counts.
+  - Single unique character: single leaf tree; payload = N bits all `0`.
+  - Unicode, Hindi, Chinese, Arabic, emoji (supplementary code points).
+* **Corruption Detection**:
+  - Wrong magic, unsupported version, truncated header/tree/payload.
+  - Invalid tree marker, duplicate leaves, invalid Unicode code point.
+  - Node count mismatch, non-zero padding bits, trailing bytes, bad CRC32.
+* **Test Classes** (`backend/src/test/java/com/huffmanstudio/archive/`):
+  - `BitWriterReaderTest.java`
+  - `HuffmanArchiveRoundTripTest.java`
+  - `HuffmanArchivePersistenceTest.java`
+  - `HuffmanArchiveFileOpsTest.java`
+  - `HuffmanArchiveCorruptionTest.java`
+* **Documentation**: `docs/HUF-ARCHIVE-FORMAT.md`.
+* **Quality Gate**: All previous Phase 1 and 2 tests still pass; all Phase 3 archive tests pass.
 
 ---
 
