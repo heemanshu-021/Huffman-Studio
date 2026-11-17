@@ -38,15 +38,21 @@ public class CorsConfig {
         config.setExposedHeaders(Arrays.asList(
                 "Content-Disposition",
                 "Content-Length",
-                "Content-Type"
+                "Content-Type",
+                "X-Original-Bytes",
+                "X-Archive-Bytes",
+                "X-Payload-Bits",
+                "X-Payload-Bytes",
+                "X-Tree-Bytes",
+                "X-Header-Bytes",
+                "X-Bytes-Saved",
+                "X-Compression-Ratio",
+                "X-Percentage-Saved"
         ));
         config.setAllowedMethods(Arrays.asList(
                 "GET",
                 "POST",
-                "PUT",
-                "DELETE",
-                "OPTIONS",
-                "HEAD"
+                "OPTIONS"
         ));
         config.setMaxAge(3600L);
 
