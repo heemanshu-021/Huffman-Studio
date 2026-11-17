@@ -1,0 +1,79 @@
+# =========================================
+# Huffman Studio - Root .gitignore
+# =========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# IDEs and Editors
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/.env.local
+frontend/.env.*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/.turbo/
+
+# Java / Backend
+backend/target/
+backend/*.jar
+backend/*.war
+backend/*.nar
+backend/*.ear
+backend/*.zip
+backend/*.tar.gz
+backend/*.rar
+backend/.flattened-pom.xml
+backend/dependency-reduced-pom.xml
+backend/buildNumber.properties
+backend/.mvn/timing.properties
+backend/.mvn/wrapper/.gitted
+
+# Maven Wrapper executable permissions should be tracked, but not target jar if re-downloaded
+# Keep maven-wrapper.jar tracked if present for offline/portable execution
+!backend/.mvn/wrapper/maven-wrapper.jar
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
