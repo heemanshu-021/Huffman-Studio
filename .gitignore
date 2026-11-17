@@ -46,6 +46,8 @@ frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/pnpm-debug.log*
 frontend/.turbo/
+frontend/*.tsbuildinfo
+*.tsbuildinfo
 
 # Java / Backend
 backend/target/
