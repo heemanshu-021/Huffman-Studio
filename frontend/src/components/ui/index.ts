@@ -5,3 +5,5 @@ export type { Toast, ToastType } from './Toast';
 export { MetricCard } from './MetricCard';
 export { StepIndicator } from './StepIndicator';
 export { EmptyState } from './EmptyState';
+export { FileDropzone } from './FileDropzone';
+export { SectionHeader } from './SectionHeader';

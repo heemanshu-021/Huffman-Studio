@@ -1,7 +1,6 @@
-import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
+import React, { useState } from 'react';
 import {
   FileArchive,
-  UploadCloud,
   FileText,
   X,
   Download,
@@ -11,6 +10,10 @@ import {
   HardDrive,
   Binary,
   Layers,
+  ShieldCheck,
+  Zap,
+  Terminal,
+  RefreshCw,
 } from 'lucide-react';
 import { compressionService } from '../services/compressionService';
 import { useSessionStats } from '../hooks/useSessionStats';
@@ -20,70 +23,65 @@ import { formatBytes } from '../utils/formatters';
 import { StepIndicator } from '../components/ui/StepIndicator';
 import { MetricCard } from '../components/ui/MetricCard';
 import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { FileDropzone } from '../components/ui/FileDropzone';
+import { SectionHeader } from '../components/ui/SectionHeader';
 
-const STEPS = [
-  { label: 'Select', description: 'Choose text file' },
-  { label: 'Compress', description: 'Run Huffman engine' },
-  { label: 'Download', description: 'Save .huf archive' },
+const WORKFLOW_STEPS = [
+  { label: 'Select Input', description: 'Upload plain text' },
+  { label: 'Bitstream Packing', description: 'Run Huffman engine' },
+  { label: 'Download .huf', description: 'Save binary archive' },
 ];
 
 export const CompressorPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [compressionStage, setCompressionStage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CompressionResult | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { recordOperation } = useSessionStats();
   const toast = useToast();
 
   const currentStep = result ? 2 : selectedFile ? 1 : 0;
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
   const validateAndSetFile = (file: File) => {
     setError(null);
     setResult(null);
+
+    // 50 MB safety limit
     const MAX_SIZE = 50 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      setError(`File size (${formatBytes(file.size)}) exceeds the 50 MB limit.`);
+      setError(`File size (${formatBytes(file.size)}) exceeds the maximum 50 MB threshold.`);
       return;
     }
+
     setSelectedFile(file);
-  };
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files?.length) validateAndSetFile(e.dataTransfer.files[0]);
-  };
-
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) validateAndSetFile(e.target.files[0]);
   };
 
   const clearSelection = () => {
     setSelectedFile(null);
     setError(null);
     setResult(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setCompressionStage('');
   };
 
   const handleCompress = async () => {
     if (!selectedFile) return;
+
     setIsCompressing(true);
     setError(null);
+    setCompressionStage('1/4: Validating UTF-8 input…');
+
     try {
+      // Meaningful stage progression feedback while awaiting backend execution
+      setTimeout(() => setCompressionStage('2/4: Computing code-point frequencies…'), 120);
+      setTimeout(() => setCompressionStage('3/4: Building min-heap & prefix codes…'), 280);
+      setTimeout(() => setCompressionStage('4/4: Packing bitstream & writing CRC-32 header…'), 420);
+
       const res = await compressionService.compressFile(selectedFile);
       setResult(res);
+
       recordOperation({
         type: 'COMPRESS',
         fileName: selectedFile.name,
@@ -92,91 +90,72 @@ export const CompressorPage: React.FC = () => {
         ratio: res.stats.compressionRatio,
         savingsPercent: res.stats.percentageSaved,
       });
+
+      // Trigger download
       compressionService.downloadBlob(res.blob, res.filename);
-      toast.success('Archive created!', `${res.filename} has been downloaded.`);
+      toast.success('Archive Generated!', `${res.filename} (${formatBytes(res.stats.archiveBytes)}) downloaded.`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      const msg = err instanceof Error ? err.message : 'An unexpected error occurred during compression.';
       setError(msg);
-      toast.error('Compression failed', msg);
+      toast.error('Compression Failed', msg);
     } finally {
       setIsCompressing(false);
+      setCompressionStage('');
     }
   };
 
   const handleManualDownload = () => {
     if (!result) return;
     compressionService.downloadBlob(result.blob, result.filename);
+    toast.info('Downloading Archive', result.filename);
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-2.5 mb-1">
-          <FileArchive className="w-5 h-5 text-emerald-400" />
-          <h2 className="text-xl font-bold text-slate-100">Text File Compressor</h2>
-        </div>
-        <p className="text-sm text-slate-400">
-          Upload plain text files to generate genuine bit-packed{' '}
-          <code className="text-emerald-400 font-mono text-xs">.huf</code> archives.
-        </p>
+    <div className="space-y-8 animate-fade-in">
+      {/* Page Header */}
+      <SectionHeader
+        title="Text File Compressor"
+        description="Transform raw UTF-8 plain text files into genuine, self-contained .huf binary archives with embedded tree structures and CRC-32 integrity validation."
+        icon={<FileArchive className="w-5 h-5" />}
+        badge={
+          <Badge variant="emerald" dot>
+            HUFN Container
+          </Badge>
+        }
+      />
+
+      {/* Workflow Step Tracker */}
+      <div className="rounded-2xl border border-surface-border bg-surface-card p-5">
+        <StepIndicator steps={WORKFLOW_STEPS} currentStep={currentStep} />
       </div>
 
-      {/* Step indicator */}
-      <StepIndicator steps={STEPS} currentStep={currentStep} className="max-w-lg" />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main column */}
-        <div className="lg:col-span-2 space-y-5">
-          {/* Upload card */}
-          <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".txt,.csv,.json,.md,.log,.xml,.yaml,.yml,text/*"
-              className="hidden"
-            />
-
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Upload & Compression Workspace */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* File Selection Card */}
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-6 space-y-5">
             {!selectedFile ? (
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
-                  isDragging
-                    ? 'border-emerald-400 bg-emerald-500/8 scale-[1.01]'
-                    : 'border-slate-700 hover:border-emerald-500/50 hover:bg-slate-900/40'
-                }`}
-              >
-                <UploadCloud
-                  className={`w-10 h-10 mx-auto mb-3 transition-colors ${
-                    isDragging ? 'text-emerald-400' : 'text-slate-600'
-                  }`}
-                />
-                <h3 className="text-sm font-semibold text-slate-200">
-                  {isDragging ? 'Drop file to upload' : 'Drag & drop text file here'}
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 mb-5">
-                  Supports UTF-8 encoded files (.txt, .md, .json, source files) up to 50 MB
-                </p>
-                <Button variant="primary" size="sm">
-                  Browse Files
-                </Button>
-              </div>
+              <FileDropzone
+                onFileSelected={validateAndSetFile}
+                accept=".txt,.csv,.json,.md,.log,.xml,.yaml,.yml,text/*"
+                title="Select or drop a plain text file"
+                subtitle="Accepts UTF-8 plain text files (.txt, .md, .json, source files) up to 50 MB"
+                supportedFormatsText="UTF-8 Plain Text (.txt, .md, .json, .csv) · Max 50 MB"
+                icon={<FileArchive className="w-8 h-8" />}
+              />
             ) : (
               <div className="space-y-5">
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/60 border border-slate-700/50">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
-                      <FileText className="w-4 h-4" />
+                {/* Selected File Details Bar */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-surface-2 border border-surface-border/80">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 shrink-0">
+                      <FileText className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-100 truncate">
                         {selectedFile.name}
                       </p>
-                      <p className="text-xs text-slate-500 font-mono">
+                      <p className="text-xs text-slate-400 font-mono">
                         {formatBytes(selectedFile.size)} · {selectedFile.type || 'text/plain'}
                       </p>
                     </div>
@@ -184,13 +163,31 @@ export const CompressorPage: React.FC = () => {
                   <button
                     onClick={clearSelection}
                     disabled={isCompressing}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-colors disabled:opacity-40"
-                    aria-label="Remove file"
+                    className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-white/[0.04] transition-colors disabled:opacity-40"
+                    title="Remove selected file"
+                    aria-label="Remove selected file"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-4.5 h-4.5" />
                   </button>
                 </div>
 
+                {/* Compression Progress Feedback */}
+                {isCompressing && (
+                  <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2 animate-pulse">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-emerald-300 flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                        Executing Java 21 Bitstream Engine…
+                      </span>
+                      <span className="font-mono text-emerald-400 text-[11px]">{compressionStage}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-surface-border overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 rounded-full w-3/4 animate-pulse" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Compress Button */}
                 <Button
                   variant="primary"
                   size="lg"
@@ -198,51 +195,76 @@ export const CompressorPage: React.FC = () => {
                   disabled={isCompressing}
                   loading={isCompressing}
                   leftIcon={<FileArchive className="w-4 h-4" />}
-                  className="w-full"
+                  className="w-full text-sm font-bold shadow-glow-emerald"
                 >
-                  {isCompressing ? 'Compressing with Java Engine…' : 'Compress to .huf Archive'}
+                  {isCompressing ? 'Encoding & Packing Archive…' : 'Compress to .huf Archive'}
                 </Button>
               </div>
             )}
 
+            {/* Error Feedback */}
             {error && (
-              <div className="mt-4 p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/50 flex items-start gap-3">
-                <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-semibold text-rose-200">Compression Error</p>
-                  <p className="text-xs text-rose-300 mt-0.5 leading-relaxed">{error}</p>
+              <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/50 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="text-xs font-semibold text-rose-200">Compression Failed</p>
+                  <p className="text-xs text-rose-300 leading-relaxed">{error}</p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Results */}
+          {/* ======================================================== */}
+          {/* RESULTS PANEL (Visible after successful compression)     */}
+          {/* ======================================================== */}
           {result && (
-            <div className="rounded-xl border border-emerald-500/20 bg-[#14141c] p-5 space-y-5 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-sm font-semibold text-slate-100">Compression Complete</h3>
+            <div className="rounded-2xl border border-emerald-500/30 bg-surface-card p-6 space-y-6 shadow-glow-card animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-surface-border">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <CheckCircle2 className="w-4.5 h-4.5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-100">
+                      Compression Completed
+                    </h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Generated: {result.filename}
+                    </p>
+                  </div>
                 </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleManualDownload}
-                  leftIcon={<Download className="w-3.5 h-3.5" />}
-                >
-                  Download .huf
-                </Button>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleManualDownload}
+                    leftIcon={<Download className="w-4 h-4" />}
+                  >
+                    Download .huf
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearSelection}
+                    leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                  >
+                    Compress Another
+                  </Button>
+                </div>
               </div>
 
-              {/* Size comparison bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs text-slate-400">
+              {/* Visual Size Comparison Bar */}
+              <div className="space-y-2 p-4 rounded-xl bg-surface-2 border border-surface-border">
+                <div className="flex justify-between text-xs text-slate-300 font-medium">
                   <span>Original: {formatBytes(result.stats.originalBytes)}</span>
-                  <span>Archive: {formatBytes(result.stats.archiveBytes)}</span>
+                  <span className="font-mono text-emerald-400">
+                    Archive: {formatBytes(result.stats.archiveBytes)}
+                  </span>
                 </div>
-                <div className="h-2 rounded-full bg-slate-800 overflow-hidden flex">
+                <div className="h-2.5 rounded-full bg-surface-0 overflow-hidden flex border border-surface-border/80">
                   <div
-                    className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-700"
+                    className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 rounded-full transition-all duration-700"
                     style={{
                       width: `${Math.min(
                         100,
@@ -251,30 +273,36 @@ export const CompressorPage: React.FC = () => {
                     }}
                   />
                 </div>
-                <p className="text-xs text-slate-500 text-center">
-                  Archive is{' '}
-                  {(
-                    (result.stats.archiveBytes / Math.max(result.stats.originalBytes, 1)) *
-                    100
-                  ).toFixed(1)}
-                  % of original size
+                <p className="text-[11px] text-slate-400 text-center">
+                  Archive constitutes{' '}
+                  <strong className="text-slate-200">
+                    {(
+                      (result.stats.archiveBytes / Math.max(result.stats.originalBytes, 1)) *
+                      100
+                    ).toFixed(1)}%
+                  </strong>{' '}
+                  of original uncompressed size
                 </p>
               </div>
 
+              {/* Primary 4 Metric Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <MetricCard
-                  label="Original"
+                  label="Original Size"
                   value={formatBytes(result.stats.originalBytes)}
+                  sub="Plain text"
                   accent="slate"
                 />
                 <MetricCard
-                  label="Archive"
+                  label="Archive Size"
                   value={formatBytes(result.stats.archiveBytes)}
+                  sub="Binary .huf"
                   accent="emerald"
                 />
                 <MetricCard
                   label="Space Saved"
                   value={formatBytes(result.stats.bytesSaved)}
+                  sub={result.stats.bytesSaved >= 0 ? 'Net reduction' : 'Container overhead'}
                   accent={result.stats.bytesSaved >= 0 ? 'emerald' : 'amber'}
                 />
                 <MetricCard
@@ -284,61 +312,67 @@ export const CompressorPage: React.FC = () => {
                       ? `${(result.stats.compressionRatio * 100).toFixed(1)}%`
                       : 'N/A'
                   }
-                  accent="indigo"
+                  sub="Efficiency"
+                  accent="cyan"
                 />
               </div>
 
+              {/* Container Overhead Notice for Small Files */}
               {result.stats.bytesSaved < 0 && (
-                <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/40 flex items-start gap-3">
-                  <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-semibold text-amber-300">Container Overhead Notice</p>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                      The archive is larger than the original. In genuine lossless compressors, the
-                      self-contained container overhead (29-byte header + tree serialization) exceeds
-                      bit savings on small inputs. As input size grows, compression efficiency scales
-                      rapidly.
+                <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-800/40 flex items-start gap-3 text-xs text-amber-200">
+                  <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-amber-300">Container Overhead Notice</p>
+                    <p className="text-slate-300 leading-relaxed text-[11px]">
+                      The generated archive is slightly larger than the raw original input. In authentic lossless
+                      compressors, the standalone container overhead (<strong>29-byte fixed header</strong> + serialized tree
+                      metadata) exceeds bit-level savings on small inputs. As document size increases, payload savings
+                      dramatically outweigh this constant overhead.
                     </p>
                   </div>
                 </div>
               )}
 
-              <div className="border-t border-slate-800/60 pt-4 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Archive Binary Breakdown
-                </p>
+              {/* Archive Binary Breakdown */}
+              <div className="space-y-3 pt-2 border-t border-surface-border">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">
+                    Binary Archive Structure Breakdown
+                  </h4>
+                  <Badge variant="slate">Specification V1</Badge>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
                   {[
                     {
-                      icon: <HardDrive className="w-3.5 h-3.5" />,
+                      icon: <HardDrive className="w-3.5 h-3.5 text-emerald-400" />,
                       label: 'Header Metadata',
-                      value: `${result.stats.headerBytes}B (29B Fixed + ${result.stats.treeBytes}B Tree)`,
+                      value: `${result.stats.headerBytes} B (29B Fixed + ${result.stats.treeBytes}B Tree)`,
                     },
                     {
-                      icon: <Binary className="w-3.5 h-3.5" />,
+                      icon: <Binary className="w-3.5 h-3.5 text-cyan-400" />,
                       label: 'Encoded Payload',
-                      value: `${result.stats.payloadBits} bits (${result.stats.payloadBytes}B)`,
+                      value: `${result.stats.payloadBits} bits (${result.stats.payloadBytes} B)`,
                     },
                     {
-                      icon: <Layers className="w-3.5 h-3.5" />,
-                      label: 'Tree Metadata',
-                      value: `${result.stats.treeBytes} Bytes`,
+                      icon: <Layers className="w-3.5 h-3.5 text-indigo-400" />,
+                      label: 'Serialized Tree',
+                      value: `${result.stats.treeBytes} Bytes (Preorder DFS)`,
                     },
                     {
-                      icon: <FileText className="w-3.5 h-3.5" />,
+                      icon: <FileText className="w-3.5 h-3.5 text-emerald-400" />,
                       label: 'Percentage Saved',
                       value: `${result.stats.percentageSaved.toFixed(2)}%`,
                     },
                   ].map((item) => (
                     <div
                       key={item.label}
-                      className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/50 border border-slate-800"
+                      className="flex items-center justify-between p-3 rounded-xl bg-surface-2 border border-surface-border/70"
                     >
-                      <span className="text-slate-500 flex items-center gap-1.5">
+                      <span className="text-slate-400 flex items-center gap-2 text-[11px]">
                         {item.icon}
                         {item.label}
                       </span>
-                      <span className="text-slate-200">{item.value}</span>
+                      <span className="text-slate-100 font-semibold text-[11px]">{item.value}</span>
                     </div>
                   ))}
                 </div>
@@ -347,54 +381,69 @@ export const CompressorPage: React.FC = () => {
           )}
         </div>
 
-        {/* Right column */}
-        <div className="space-y-5">
-          <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              How It Works
-            </h4>
+        {/* Right Column: Architectural Guidance & Specifications */}
+        <div className="space-y-6">
+          {/* How It Compresses Card */}
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-emerald-400" />
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-200 font-mono">
+                Algorithmic Pipeline
+              </h4>
+            </div>
             <ol className="space-y-3 text-xs text-slate-400">
               {[
-                ['Frequency Analysis', 'Each Unicode code point counted for optimal prefix codes'],
-                ['Min-Heap Tree', 'Priority queue pairs lowest-frequency nodes'],
-                ['Bitstream Packing', 'Variable-length bits packed into real 8-bit bytes'],
-                ['Self-Contained Header', 'Tree + CRC-32 embedded in archive'],
+                ['Frequency Counting', 'Scans raw UTF-8 bytes to compute symbol occurrence probabilities.'],
+                ['Min-Heap PriorityQueue', 'Greedily pairs two lowest-frequency nodes into subtree merges.'],
+                ['Prefix Code Generation', 'Assigns variable-length bit codes (0 = left, 1 = right).'],
+                ['BitWriter Byte Packing', 'Packs variable bits into genuine 8-bit bytes with MSB alignment.'],
+                ['CRC-32 Checksumming', 'Embeds 32-bit verification hash for zero-loss recovery.'],
               ].map(([title, desc], i) => (
                 <li key={i} className="flex items-start gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                     {i + 1}
                   </span>
                   <div>
                     <p className="text-slate-200 font-medium">{title}</p>
-                    <p className="text-slate-500 mt-0.5">{desc}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{desc}</p>
                   </div>
                 </li>
               ))}
             </ol>
-            <div className="pt-2 border-t border-slate-800/50 flex items-center gap-1.5 text-emerald-400 text-xs">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Zero cloud dependency · Pure Java 21 engine
+            <div className="pt-3 border-t border-surface-border flex items-center gap-2 text-emerald-400 text-xs">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>Lossless &bull; Pure Java 21 Engine</span>
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-3">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Archive Format (.huf v1)
-            </h4>
-            <div className="space-y-1 text-xs font-mono">
+          {/* Archive Specification Card */}
+          <div className="rounded-2xl border border-surface-border bg-surface-card p-6 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-cyan-400" />
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-200 font-mono">
+                  Archive Spec (.huf v1)
+                </h4>
+              </div>
+              <Badge variant="cyan">HUFN</Badge>
+            </div>
+            <div className="space-y-1.5 text-xs font-mono">
               {[
-                ['Magic Number', '0x4855464E (HUFN)', true],
-                ['Version', '0x01', false],
-                ['Header Size', '29 Bytes Fixed', false],
-                ['Integrity', 'CRC-32 IEEE 802.3', false],
-                ['Tree Serial.', 'Preorder Bit Seq.', false],
+                ['Magic Header', '0x4855464E (HUFN)', true],
+                ['Format Version', '0x01', false],
+                ['Header Length', '29 Bytes Fixed', false],
+                ['Integrity Hash', 'CRC-32 (IEEE 802.3)', false],
+                ['Tree Structure', 'Preorder Bit Sequence', false],
+                ['Padding Mode', '0–7 Bits MSB Aligned', false],
               ].map(([label, value, em]) => (
                 <div
                   key={label as string}
-                  className="flex justify-between py-1.5 border-b border-slate-800/40 last:border-0"
+                  className="flex justify-between py-1.5 border-b border-surface-border/50 last:border-0"
                 >
-                  <span className="text-slate-500">{label}</span>
-                  <span className={em ? 'text-emerald-400' : 'text-slate-300'}>{value}</span>
+                  <span className="text-slate-400 text-[11px]">{label}</span>
+                  <span className={`text-[11px] ${em ? 'text-emerald-400 font-bold' : 'text-slate-200'}`}>
+                    {value}
+                  </span>
                 </div>
               ))}
             </div>

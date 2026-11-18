@@ -9,10 +9,11 @@ import {
   Trash2,
   CheckCircle2,
   Cpu,
-  Sparkles,
-  Layers,
   RefreshCw,
   BookOpen,
+  ArrowRight,
+  ShieldCheck,
+  Terminal,
 } from 'lucide-react';
 import { useHealthCheck } from '../hooks/useHealthCheck';
 import { useSessionStats } from '../hooks/useSessionStats';
@@ -28,144 +29,174 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900 via-[#0f1420] to-slate-900 p-7 sm:p-9">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.06),transparent_60%)]" />
-        <div className="relative z-10 max-w-2xl space-y-4">
-          <Badge variant="emerald" dot>
-            {data?.version ? `v${data.version}` : 'Huffman Studio'}
-          </Badge>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Huffman Studio
-          </h1>
-          <p className="text-sm text-slate-400 leading-relaxed">
-            A production-quality text compression platform built with{' '}
-            <span className="text-emerald-400 font-medium">Java 21 + Spring Boot</span> bitstream
-            processing, self-contained{' '}
-            <span className="text-emerald-400 font-medium">.huf binary archives</span> with CRC-32
-            integrity, and interactive{' '}
-            <span className="text-emerald-400 font-medium">React + TypeScript</span> visualizations.
-          </p>
-          <div className="flex flex-wrap gap-2.5 pt-1">
-            <Link
-              to="/compress"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-lg shadow-emerald-900/25"
-            >
-              <FileArchive className="w-4 h-4" />
-              Compress File
+      {/* ============================================================ */}
+      {/* 1. HERO SECTION                                              */}
+      {/* ============================================================ */}
+      <div className="relative overflow-hidden rounded-3xl border border-surface-border bg-gradient-to-br from-surface-card via-surface-1 to-surface-0 p-8 sm:p-12 shadow-glow-card">
+        {/* Subtle decorative radial lights */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/[0.07] rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-cyan-500/[0.05] rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 max-w-3xl space-y-5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="emerald" dot>
+              {data?.version ? `Huffman Engine v${data.version}` : 'Engine Ready'}
+            </Badge>
+            <Badge variant="cyan">
+              Bit-Level Packing
+            </Badge>
+            <Badge variant="slate">
+              CRC-32 Validated
+            </Badge>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+              Lossless Compression. <br />
+              <span className="text-gradient-emerald">Authentic Bitstream Packing.</span>
+            </h1>
+            <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl pt-1">
+              A high-performance text compression suite powered by pure{' '}
+              <strong className="text-white font-semibold">Java 21 Spring Boot</strong> bitstream I/O,
+              generating self-contained <code className="text-emerald-400 font-mono text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">.huf</code> binary
+              archives with embedded tree topologies and CRC-32 integrity.
+            </p>
+          </div>
+
+          {/* Primary Action Buttons */}
+          <div className="flex flex-wrap items-center gap-3 pt-3">
+            <Link to="/compress">
+              <Button
+                variant="primary"
+                size="md"
+                leftIcon={<FileArchive className="w-4 h-4" />}
+              >
+                Compress Text File
+              </Button>
             </Link>
-            <Link
-              to="/decompress"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-            >
-              <FileText className="w-4 h-4 text-emerald-400" />
-              Decompress .huf
+            <Link to="/decompress">
+              <Button
+                variant="secondary"
+                size="md"
+                leftIcon={<FileText className="w-4 h-4 text-emerald-400" />}
+              >
+                Decompress .huf Archive
+              </Button>
             </Link>
-            <Link
-              to="/visualizer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-            >
-              <Network className="w-4 h-4 text-emerald-400" />
-              Tree Visualizer
-            </Link>
-            <Link
-              to="/how-it-works"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
-            >
-              <BookOpen className="w-4 h-4 text-emerald-400" />
-              How It Works
+            <Link to="/visualizer">
+              <Button
+                variant="outline"
+                size="md"
+                leftIcon={<Network className="w-4 h-4" />}
+              >
+                Interactive Tree Visualizer
+              </Button>
             </Link>
           </div>
         </div>
       </div>
 
-      {/* Backend Status + Session Metrics */}
+      {/* ============================================================ */}
+      {/* 2. ENGINE HEALTH & SESSION METRICS                           */}
+      {/* ============================================================ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Backend card */}
-        <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-200">Java 21 Backend</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Spring Boot REST API</p>
-            </div>
-            <span
-              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                status === 'UP'
-                  ? 'bg-emerald-400 animate-pulse'
-                  : status === 'CHECKING'
-                  ? 'bg-amber-400 animate-pulse'
-                  : 'bg-rose-400'
-              }`}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between py-2 border-b border-slate-800/60">
-              <span className="text-xs text-slate-500">Status</span>
-              <span
-                className={`text-xs font-mono font-bold ${
-                  status === 'UP'
-                    ? 'text-emerald-400'
-                    : status === 'CHECKING'
-                    ? 'text-amber-400'
-                    : 'text-rose-400'
-                }`}
-              >
-                {status}
-              </span>
-            </div>
-            {data && (
-              <>
-                <div className="flex items-center justify-between py-1.5">
-                  <span className="text-xs text-slate-500">Message</span>
-                  <span className="text-xs text-slate-300 font-medium">{data.message}</span>
+        {/* Backend Health Card */}
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6 flex flex-col justify-between space-y-4 shadow-sm">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-surface-border/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400">
+                  <Cpu className="w-4 h-4" />
                 </div>
-                <div className="flex items-center justify-between py-1.5">
-                  <span className="text-xs text-slate-500">Version</span>
-                  <span className="text-xs font-mono text-emerald-400">v{data.version}</span>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-100">Java 21 Engine</h3>
+                  <p className="text-[11px] text-slate-400">Spring Boot 3.3.5 Runtime</p>
                 </div>
-                <div className="flex items-center justify-between py-1.5">
-                  <span className="text-xs text-slate-500">Last Ping</span>
-                  <span className="text-xs font-mono text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {formatDate(data.timestamp)}
-                  </span>
-                </div>
-              </>
-            )}
-            {error && (
-              <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800/40 text-xs text-rose-300 mt-2">
-                {error}. Start backend with{' '}
-                <code className="text-rose-200 font-mono">./mvnw spring-boot:run</code>
               </div>
-            )}
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  status === 'UP'
+                    ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]'
+                    : status === 'CHECKING'
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-rose-400 shadow-[0_0_8px_#f43f5e]'
+                }`}
+              />
+            </div>
+
+            <div className="space-y-3 pt-3 text-xs">
+              <div className="flex items-center justify-between py-1 border-b border-surface-border/40">
+                <span className="text-slate-400">Status</span>
+                <span
+                  className={`font-mono font-bold ${
+                    status === 'UP'
+                      ? 'text-emerald-400'
+                      : status === 'CHECKING'
+                      ? 'text-amber-400'
+                      : 'text-rose-400'
+                  }`}
+                >
+                  {status === 'UP' ? 'CONNECTED' : status === 'CHECKING' ? 'CONNECTING' : 'DISCONNECTED'}
+                </span>
+              </div>
+              {data && (
+                <>
+                  <div className="flex items-center justify-between py-1 border-b border-surface-border/40">
+                    <span className="text-slate-400">Service</span>
+                    <span className="text-slate-200 font-medium">{data.message}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-surface-border/40">
+                    <span className="text-slate-400">Version</span>
+                    <span className="font-mono text-emerald-400">v{data.version}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-slate-400">Last Ping</span>
+                    <span className="font-mono text-slate-400 flex items-center gap-1 text-[11px]">
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      {formatDate(data.timestamp)}
+                    </span>
+                  </div>
+                </>
+              )}
+              {error && (
+                <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/40 text-xs text-rose-300">
+                  {error}. Start backend with{' '}
+                  <code className="text-rose-200 font-mono">./mvnw spring-boot:run</code>
+                </div>
+              )}
+            </div>
           </div>
 
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
             onClick={() => refetch()}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-            className="w-full text-slate-500 hover:text-slate-300"
+            leftIcon={<RefreshCw className="w-3.5 h-3.5 text-slate-400" />}
+            className="w-full text-slate-300"
           >
-            Ping Health
+            Trigger Health Probe
           </Button>
         </div>
 
-        {/* Session Stats */}
-        <div className="lg:col-span-2 rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        {/* Live Session Analytics Container */}
+        <div className="lg:col-span-2 rounded-2xl border border-surface-border bg-surface-card p-6 flex flex-col justify-between space-y-5 shadow-sm">
+          <div className="flex items-center justify-between pb-3 border-b border-surface-border/80">
             <div>
-              <h3 className="text-sm font-semibold text-slate-200">Session Activity</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Operations tracked this browser session</p>
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-semibold text-slate-100">Live Session Metrics</h3>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Real-time compression operations tracked across this active browser session
+              </p>
             </div>
             {stats.operations.length > 0 && (
               <Button
                 variant="ghost"
                 size="xs"
                 onClick={clearSession}
-                leftIcon={<Trash2 className="w-3 h-3" />}
-                className="text-slate-500 hover:text-rose-400"
+                leftIcon={<Trash2 className="w-3 h-3 text-rose-400" />}
+                className="text-slate-400 hover:text-rose-400"
               >
                 Clear
               </Button>
@@ -174,74 +205,83 @@ export const DashboardPage: React.FC = () => {
 
           {stats.operations.length === 0 ? (
             <EmptyState
-              icon={<Activity className="w-6 h-6" />}
-              title="No activity yet"
-              description="Upload text files to compress or .huf archives to decompress. All metrics are tracked here."
+              icon={<Activity className="w-7 h-7 text-slate-500" />}
+              title="No Operations in this Session Yet"
+              description="Upload text files to compress or .huf binary archives to decompress. All real byte savings and ratio metrics will appear here in real time."
               action={
-                <Link
-                  to="/compress"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
-                >
-                  Open Compressor
+                <Link to="/compress">
+                  <Button variant="primary" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+                    Open Compressor
+                  </Button>
                 </Link>
               }
+              className="py-8"
             />
           ) : (
             <div className="space-y-4">
+              {/* 4 Metric Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <MetricCard label="Operations" value={stats.operations.length} accent="slate" />
+                <MetricCard
+                  label="Total Ops"
+                  value={stats.operations.length}
+                  sub="Processed"
+                  accent="slate"
+                />
                 <MetricCard
                   label="Compressed"
-                  value={`${stats.totalCompressed}`}
-                  sub="files"
+                  value={stats.totalCompressed}
+                  sub="Text files"
                   accent="emerald"
                 />
                 <MetricCard
                   label="Decompressed"
-                  value={`${stats.totalDecompressed}`}
-                  sub="files"
-                  accent="indigo"
+                  value={stats.totalDecompressed}
+                  sub="Archives"
+                  accent="cyan"
                 />
                 <MetricCard
-                  label="Space Saved"
+                  label="Net Saved"
                   value={formatBytes(stats.totalBytesSaved)}
+                  sub={stats.totalBytesSaved >= 0 ? 'Space reduction' : 'Container overhead'}
                   accent={stats.totalBytesSaved >= 0 ? 'emerald' : 'amber'}
                 />
               </div>
 
-              <div className="rounded-lg border border-slate-800/60 overflow-hidden">
-                <div className="overflow-x-auto max-h-[200px] overflow-y-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-900/80 text-slate-500 sticky top-0 border-b border-slate-800">
+              {/* History Table */}
+              <div className="rounded-xl border border-surface-border overflow-hidden bg-surface-0/60">
+                <div className="overflow-x-auto max-h-[190px] overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-surface-2 text-slate-400 sticky top-0 border-b border-surface-border font-mono text-[10px] uppercase tracking-wider">
                       <tr>
-                        <th className="text-[10px] uppercase tracking-wider py-2 px-3 font-semibold">Type</th>
-                        <th className="text-[10px] uppercase tracking-wider py-2 px-3 font-semibold">File</th>
-                        <th className="text-[10px] uppercase tracking-wider py-2 px-3 font-semibold">Size Flow</th>
-                        <th className="text-[10px] uppercase tracking-wider py-2 px-3 font-semibold">Ratio</th>
+                        <th className="py-2 px-3">Type</th>
+                        <th className="py-2 px-3">Filename</th>
+                        <th className="py-2 px-3">Size Flow</th>
+                        <th className="py-2 px-3">Ratio</th>
+                        <th className="py-2 px-3">Timestamp</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/40 font-mono">
+                    <tbody className="divide-y divide-surface-border/50 font-mono text-slate-300">
                       {stats.operations.map((op) => (
-                        <tr key={op.id} className="hover:bg-slate-800/30 transition-colors">
+                        <tr key={op.id} className="hover:bg-white/[0.02] transition-colors">
                           <td className="py-2 px-3">
                             <Badge
-                              variant={op.type === 'COMPRESS' ? 'emerald' : 'indigo'}
+                              variant={op.type === 'COMPRESS' ? 'emerald' : 'cyan'}
                               className="text-[10px]"
                             >
                               {op.type}
                             </Badge>
                           </td>
-                          <td
-                            className="py-2 px-3 text-xs text-slate-300 max-w-[140px] truncate"
-                            title={op.fileName}
-                          >
+                          <td className="py-2 px-3 text-slate-200 max-w-[140px] truncate" title={op.fileName}>
                             {op.fileName}
                           </td>
-                          <td className="py-2 px-3 text-[11px] text-slate-500">
+                          <td className="py-2 px-3 text-[11px] text-slate-400">
                             {formatBytes(op.originalSize)} → {formatBytes(op.processedSize)}
                           </td>
-                          <td className="py-2 px-3 text-[11px] text-slate-400">
+                          <td className="py-2 px-3 text-[11px] text-emerald-400 font-semibold">
                             {op.ratio != null ? `${(op.ratio * 100).toFixed(1)}%` : '—'}
+                          </td>
+                          <td className="py-2 px-3 text-[10px] text-slate-500">
+                            {formatDate(op.timestamp)}
                           </td>
                         </tr>
                       ))}
@@ -254,73 +294,192 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Tech info cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Technology Stack</h4>
+      {/* ============================================================ */}
+      {/* 3. QUICK NAVIGATION CARDS                                    */}
+      {/* ============================================================ */}
+      <div className="space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">
+          Core Workspaces
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link
+            to="/compress"
+            className="group rounded-2xl border border-surface-border bg-surface-card p-5 hover:border-emerald-500/40 hover:bg-surface-elevated transition-all duration-200 flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                <FileArchive className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-100 group-hover:text-emerald-400 transition-colors">
+                Compressor Workspace
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Upload UTF-8 text files to generate genuine bitstream-packed <code className="text-emerald-400">.huf</code> archives.
+              </p>
+            </div>
+            <div className="flex items-center text-xs font-medium text-emerald-400 gap-1 pt-1">
+              <span>Open Compressor</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          <Link
+            to="/decompress"
+            className="group rounded-2xl border border-surface-border bg-surface-card p-5 hover:border-cyan-500/40 hover:bg-surface-elevated transition-all duration-200 flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-100 group-hover:text-cyan-400 transition-colors">
+                Decompressor Workspace
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Restore exact original text with bit-for-bit CRC-32 integrity checking and live preview.
+              </p>
+            </div>
+            <div className="flex items-center text-xs font-medium text-cyan-400 gap-1 pt-1">
+              <span>Open Decompressor</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          <Link
+            to="/visualizer"
+            className="group rounded-2xl border border-surface-border bg-surface-card p-5 hover:border-emerald-500/40 hover:bg-surface-elevated transition-all duration-200 flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
+                <Network className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-100 group-hover:text-emerald-400 transition-colors">
+                Tree Visualizer Canvas
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Inspect dynamic Huffman trees, trace root-to-leaf paths, and explore symbol frequencies.
+              </p>
+            </div>
+            <div className="flex items-center text-xs font-medium text-emerald-400 gap-1 pt-1">
+              <span>Explore Visualizer</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+
+          <Link
+            to="/how-it-works"
+            className="group rounded-2xl border border-surface-border bg-surface-card p-5 hover:border-indigo-500/40 hover:bg-surface-elevated transition-all duration-200 flex flex-col justify-between space-y-4"
+          >
+            <div className="space-y-2">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/25 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-100 group-hover:text-indigo-400 transition-colors">
+                Algorithmic Reference
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Step-by-step walkthrough of greedy min-heap pairing, BitWriter mechanics, and archive offsets.
+              </p>
+            </div>
+            <div className="flex items-center text-xs font-medium text-indigo-400 gap-1 pt-1">
+              <span>Read Documentation</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* 4. TECHNICAL SPECIFICATION & CONTAINER FOUNDATIONS           */}
+      {/* ============================================================ */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6 space-y-3.5">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-emerald-400" />
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+              Architecture Standards
+            </h4>
+          </div>
           <ul className="space-y-3">
             {[
               {
-                icon: <Cpu className="w-4 h-4 text-emerald-400" />,
-                title: 'Java 21 Spring Boot 3',
-                desc: 'Min-heap Huffman engine, pure bitstream I/O, REST endpoints',
+                title: 'Java 21 Spring Boot 3 Engine',
+                desc: 'Min-heap tree builder, pure bitstream I/O with BitWriter, streaming REST controllers.',
               },
               {
-                icon: <Layers className="w-4 h-4 text-emerald-400" />,
-                title: 'React 18 + TypeScript',
-                desc: 'Type-safe client services, binary blob downloads, interactive tree',
+                title: 'React 18 + TypeScript Client',
+                desc: 'Type-safe contracts, binary blob stream handling, reactive session tracking.',
               },
               {
-                icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
-                title: 'Tailwind CSS + Recharts',
-                desc: 'Premium dark UI and interactive frequency charts',
+                title: 'Tailwind CSS + Recharts Canvas',
+                desc: 'High-density developer theme, responsive SVG viewport, symbol frequency analytics.',
               },
             ].map((item, i) => (
               <li key={i} className="flex items-start gap-2.5">
-                <span className="mt-0.5 flex-shrink-0">{item.icon}</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-semibold text-slate-200">{item.title}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{item.desc}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{item.desc}</p>
                 </div>
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Archive Spec (.huf v1)</h4>
-          <div className="space-y-1 font-mono text-xs">
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6 space-y-3.5">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-cyan-400" />
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+              Archive Specification (.huf v1)
+            </h4>
+          </div>
+          <div className="space-y-1.5 font-mono text-xs">
             {[
-              { label: 'Magic', value: '0x4855464E (HUFN)', em: true },
-              { label: 'Version', value: '0x01', em: false },
-              { label: 'Header', value: '29 Bytes Fixed', em: false },
-              { label: 'Integrity', value: 'CRC-32 IEEE 802.3', em: false },
-              { label: 'Tree', value: 'Preorder Bit Sequence', em: false },
+              { label: 'Magic Header', value: 'HUFN (0x4855464E)', em: true },
+              { label: 'Version', value: '0x01 (Version 1)', em: false },
+              { label: 'Fixed Header', value: '29 Bytes Total', em: false },
+              { label: 'Integrity Check', value: 'CRC-32 (IEEE 802.3)', em: false },
+              { label: 'Tree Encoding', value: 'Preorder DFS Sequence', em: false },
             ].map(({ label, value, em }) => (
               <div
                 key={label}
-                className="flex justify-between py-1.5 border-b border-slate-800/40 last:border-0"
+                className="flex justify-between py-1.5 border-b border-surface-border/50 last:border-0"
               >
-                <span className="text-slate-500">{label}</span>
-                <span className={em ? 'text-emerald-400' : 'text-slate-300'}>{value}</span>
+                <span className="text-slate-400 text-[11px]">{label}</span>
+                <span className={`text-[11px] ${em ? 'text-emerald-400 font-bold' : 'text-slate-200'}`}>
+                  {value}
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Key Capabilities</h4>
+        <div className="rounded-2xl border border-surface-border bg-surface-card p-6 space-y-3.5">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+              Algorithmic Guarantees
+            </h4>
+          </div>
           <ul className="space-y-3">
             {[
-              { title: 'Full Unicode / UTF-8', desc: 'Multi-byte code points, symbols, and emojis' },
-              { title: 'Byte-for-Byte Fidelity', desc: 'CRC-32 checksums on every round-trip' },
-              { title: 'Honest Metrics', desc: 'Transparent container overhead reporting' },
-            ].map(({ title, desc }) => (
-              <li key={title} className="flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+              {
+                title: 'Full Unicode Spectrum',
+                desc: 'Operates on 32-bit Unicode code points supporting Indic, CJK, Arabic, and emojis.',
+              },
+              {
+                title: 'Byte-for-Byte Fidelity',
+                desc: 'Exact byte identity confirmed on decompression; zero perceptual or information loss.',
+              },
+              {
+                title: 'Honest Container Metrics',
+                desc: 'Transparently accounts for 29B header + tree overhead on small files.',
+              },
+            ].map(({ title, desc }, i) => (
+              <li key={i} className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-semibold text-slate-200">{title}</p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{desc}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{desc}</p>
                 </div>
               </li>
             ))}

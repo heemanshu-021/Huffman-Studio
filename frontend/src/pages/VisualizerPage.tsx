@@ -1,6 +1,6 @@
-import React, { useState, useRef, useMemo, ChangeEvent } from 'react';
+import React, { useState, useRef, useMemo, ChangeEvent, useCallback } from 'react';
 import { analysisService } from '../services/analysisService';
-import { AnalysisResult, TreeNode } from '../types/compression';
+import { AnalysisResult, TreeNode, CodeTableEntry } from '../types/compression';
 import {
   Network,
   Upload,
@@ -12,6 +12,11 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Copy,
+  Check,
+  ArrowUpDown,
+  ChevronRight,
+  Layers,
 } from 'lucide-react';
 import {
   BarChart,
@@ -21,10 +26,12 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Cell,
 } from 'recharts';
 import { Button } from '../components/ui/Button';
 import { MetricCard } from '../components/ui/MetricCard';
 import { Badge } from '../components/ui/Badge';
+import { SectionHeader } from '../components/ui/SectionHeader';
 
 interface LayoutNode {
   node: TreeNode;
@@ -32,9 +39,13 @@ interface LayoutNode {
   y: number;
   isLeaf: boolean;
   depth: number;
+  path: string;
   left?: LayoutNode;
   right?: LayoutNode;
 }
+
+type SortField = 'frequency' | 'bitLength' | 'symbol';
+type SortDirection = 'asc' | 'desc';
 
 export const VisualizerPage: React.FC = () => {
   const [inputText, setInputText] = useState('Huffman Studio creates genuine binary archives!');
@@ -44,8 +55,17 @@ export const VisualizerPage: React.FC = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [highlightedCode, setHighlightedCode] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
-  const [zoom, setZoom] = useState(1);
+  const [sortField, setSortField] = useState<SortField>('frequency');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [copiedCode, setCopiedCode] = useState(false);
 
+  // Pan & Zoom state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+
+  const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sampleTexts = [
@@ -53,6 +73,7 @@ export const VisualizerPage: React.FC = () => {
     { label: 'Repeated', text: 'AAAAAAABBBBBBCCCCDDE' },
     { label: 'Hindi Unicode', text: 'नमस्ते दुनिया! यह हफ़मैन कोडिंग का परीक्षण है।' },
     { label: 'Emojis & Symbols', text: '🚀 Huffman 🌟 Compression ⚡ Matrix 💻 2026' },
+    { label: 'Source Code', text: 'const compress = (stream) => huffman.encode(stream);' },
   ];
 
   const handleAnalyze = async () => {
@@ -73,6 +94,7 @@ export const VisualizerPage: React.FC = () => {
       setResult(res);
       setHighlightedCode(null);
       setZoom(1);
+      setPan({ x: 0, y: 0 });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Analysis failed.');
     } finally {
@@ -105,70 +127,126 @@ export const VisualizerPage: React.FC = () => {
   const treeLayout = useMemo(() => {
     if (!result || !result.tree) return null;
     let leafCounter = 0;
-    const leafSpacing = 85;
-    const depthSpacing = 75;
+    const leafSpacing = 92;
+    const depthSpacing = 82;
 
-    function buildLayout(node: TreeNode, depth: number): LayoutNode {
+    function buildLayout(node: TreeNode, depth: number, currentPath: string): LayoutNode {
       if (node.isLeaf || (!node.left && !node.right)) {
-        const x = leafCounter * leafSpacing + 60;
+        const x = leafCounter * leafSpacing + 70;
         leafCounter++;
-        return { node, x, y: depth * depthSpacing + 50, isLeaf: true, depth };
+        return { node, x, y: depth * depthSpacing + 60, isLeaf: true, depth, path: currentPath };
       }
-      const left = node.left ? buildLayout(node.left, depth + 1) : undefined;
-      const right = node.right ? buildLayout(node.right, depth + 1) : undefined;
+      const left = node.left ? buildLayout(node.left, depth + 1, currentPath + '0') : undefined;
+      const right = node.right ? buildLayout(node.right, depth + 1, currentPath + '1') : undefined;
       const x = left && right ? (left.x + right.x) / 2 : left ? left.x : right ? right.x : 0;
-      return { node, x, y: depth * depthSpacing + 50, isLeaf: false, depth, left, right };
+      return { node, x, y: depth * depthSpacing + 60, isLeaf: false, depth, path: currentPath, left, right };
     }
 
-    const layout = buildLayout(result.tree, 0);
-    const totalWidth = Math.max(800, leafCounter * leafSpacing + 120);
+    const layout = buildLayout(result.tree, 0, '');
+    const totalWidth = Math.max(860, leafCounter * leafSpacing + 140);
     const maxDepth = (function getMaxDepth(n: LayoutNode): number {
       const l = n.left ? getMaxDepth(n.left) : n.depth;
       const r = n.right ? getMaxDepth(n.right) : n.depth;
       return Math.max(n.depth, l, r);
     })(layout);
-    const totalHeight = (maxDepth + 1) * depthSpacing + 90;
+    const totalHeight = (maxDepth + 1) * depthSpacing + 100;
     return { layout, totalWidth, totalHeight };
   }, [result]);
 
-  // Flatten nodes/edges for SVG
+  // Flatten nodes and edges for SVG
   const { nodesList, edgesList } = useMemo(() => {
     if (!treeLayout) return { nodesList: [], edgesList: [] };
     const nodes: LayoutNode[] = [];
-    const edges: Array<{ x1: number; y1: number; x2: number; y2: number; bit: '0' | '1'; childCode: string }> = [];
+    const edges: Array<{
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      bit: '0' | '1';
+      childCode: string;
+      parentCode: string;
+    }> = [];
 
-    function traverse(current: LayoutNode, currentPath: string) {
+    function traverse(current: LayoutNode) {
       nodes.push(current);
       if (current.left) {
-        const nextCode = currentPath + '0';
-        edges.push({ x1: current.x, y1: current.y, x2: current.left.x, y2: current.left.y, bit: '0', childCode: nextCode });
-        traverse(current.left, nextCode);
+        edges.push({
+          x1: current.x,
+          y1: current.y,
+          x2: current.left.x,
+          y2: current.left.y,
+          bit: '0',
+          childCode: current.left.path,
+          parentCode: current.path,
+        });
+        traverse(current.left);
       }
       if (current.right) {
-        const nextCode = currentPath + '1';
-        edges.push({ x1: current.x, y1: current.y, x2: current.right.x, y2: current.right.y, bit: '1', childCode: nextCode });
-        traverse(current.right, nextCode);
+        edges.push({
+          x1: current.x,
+          y1: current.y,
+          x2: current.right.x,
+          y2: current.right.y,
+          bit: '1',
+          childCode: current.right.path,
+          parentCode: current.path,
+        });
+        traverse(current.right);
       }
     }
 
-    traverse(treeLayout.layout, '');
+    traverse(treeLayout.layout);
     return { nodesList: nodes, edgesList: edges };
   }, [treeLayout]);
 
-  // Filtered code table
-  const filteredCodeTable = useMemo(() => {
-    if (!result) return [];
-    if (!filterQuery.trim()) return result.codeTable;
-    const q = filterQuery.toLowerCase();
-    return result.codeTable.filter(
-      (entry) =>
-        entry.displayCharacter.toLowerCase().includes(q) ||
-        entry.code.includes(q) ||
-        entry.codePoint.toString().includes(q)
-    );
-  }, [result, filterQuery]);
+  // Selected entry for inspector
+  const selectedEntry = useMemo<CodeTableEntry | null>(() => {
+    if (!result || !highlightedCode) return null;
+    return result.codeTable.find((e) => e.code === highlightedCode) || null;
+  }, [result, highlightedCode]);
 
-  // Chart data
+  // Handle Sort
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'symbol' ? 'asc' : 'desc');
+    }
+  };
+
+  // Filtered and sorted code table
+  const sortedAndFilteredCodeTable = useMemo(() => {
+    if (!result) return [];
+    let entries = [...result.codeTable];
+
+    if (filterQuery.trim()) {
+      const q = filterQuery.toLowerCase();
+      entries = entries.filter(
+        (entry) =>
+          entry.displayCharacter.toLowerCase().includes(q) ||
+          entry.code.includes(q) ||
+          entry.codePoint.toString(16).toLowerCase().includes(q) ||
+          entry.codePoint.toString().includes(q)
+      );
+    }
+
+    entries.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'frequency') {
+        comparison = a.frequency - b.frequency;
+      } else if (sortField === 'bitLength') {
+        comparison = a.bitLength - b.bitLength;
+      } else if (sortField === 'symbol') {
+        comparison = a.displayCharacter.localeCompare(b.displayCharacter);
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return entries;
+  }, [result, filterQuery, sortField, sortDirection]);
+
+  // Chart data (top 20)
   const chartData = useMemo(() => {
     if (!result) return [];
     return result.frequencies.slice(0, 20).map((f) => ({
@@ -178,6 +256,43 @@ export const VisualizerPage: React.FC = () => {
     }));
   }, [result]);
 
+  // Pan handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Left click only
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return;
+    setPan({
+      x: e.clientX - panStart.x,
+      y: e.clientY - panStart.y,
+    });
+  };
+
+  const handleMouseUp = () => setIsPanning(false);
+
+  const handleFitScreen = useCallback(() => {
+    if (!canvasRef.current || !treeLayout) return;
+    const containerWidth = canvasRef.current.clientWidth - 40;
+    const containerHeight = 520;
+    const scaleX = containerWidth / treeLayout.totalWidth;
+    const scaleY = containerHeight / treeLayout.totalHeight;
+    const newZoom = Math.min(1.2, Math.max(0.3, Math.min(scaleX, scaleY) * 0.95));
+    setZoom(newZoom);
+    setPan({
+      x: (containerWidth - treeLayout.totalWidth * newZoom) / 2,
+      y: 20,
+    });
+  }, [treeLayout]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 1800);
+  };
+
   const rawBits = result ? result.originalByteSize * 8 : 0;
   const avgBitLength =
     result && result.characterCount > 0
@@ -185,56 +300,93 @@ export const VisualizerPage: React.FC = () => {
       : '0.00';
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-8 animate-fade-in pb-12">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2.5 mb-1">
-          <Network className="w-5 h-5 text-emerald-400" />
-          <h2 className="text-xl font-bold text-slate-100">Huffman Tree Visualizer</h2>
-        </div>
-        <p className="text-sm text-slate-400">
-          Explore authentic Huffman trees generated by the Java 21 backend. Inspect prefix codes and
-          trace bit paths interactively.
-        </p>
-      </div>
+      <SectionHeader
+        title="Huffman Tree Visualizer"
+        description="Explore authentic Huffman binary trees constructed live by the Java 21 engine. Trace root-to-leaf prefix codes, inspect bit allocations, and analyze symbol entropy."
+        icon={<Network className="w-5 h-5" />}
+        badge={
+          <Badge variant="emerald" dot>
+            Algorithmic Engine
+          </Badge>
+        }
+        actions={
+          result && (
+            <div className="flex items-center gap-2">
+              <Badge variant="cyan">
+                {result.uniqueCharacterCount} Unique Symbols
+              </Badge>
+              <Badge variant="indigo">
+                {result.encodedBitCount.toLocaleString()} Bits
+              </Badge>
+            </div>
+          )
+        }
+      />
 
-      {/* Input section */}
-      <div className="rounded-xl border border-slate-800/80 bg-[#14141c] p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Input Data
-          </span>
-        </div>
+      {/* Input section card */}
+      <div className="glass-card rounded-2xl p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Input Dataset
+            </span>
+            <span className="text-[11px] text-slate-500">
+              (Live UTF-8 text or custom file)
+            </span>
+          </div>
 
-        {/* Preset buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-500 flex items-center gap-1 font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            Presets:
-          </span>
-          {sampleTexts.map((sample) => (
-            <button
-              key={sample.label}
-              type="button"
-              onClick={() => { clearFile(); setInputText(sample.text); }}
-              className="px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition-colors"
-            >
-              {sample.label}
-            </button>
-          ))}
+          {/* Preset Buttons */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1 font-semibold mr-1">
+              <Sparkles className="w-3 h-3 text-emerald-400" />
+              Presets:
+            </span>
+            {sampleTexts.map((sample) => (
+              <button
+                key={sample.label}
+                type="button"
+                onClick={() => {
+                  clearFile();
+                  setInputText(sample.text);
+                }}
+                className="px-2.5 py-1 rounded-lg text-xs font-medium bg-surface-2 hover:bg-surface-3 text-slate-300 border border-surface-border transition-all hover:border-slate-600 active:scale-95"
+              >
+                {sample.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Text area */}
-        <textarea
-          rows={3}
-          value={inputText}
-          onChange={(e) => { if (selectedFile) clearFile(); setInputText(e.target.value); }}
-          placeholder="Enter text or paste Unicode content here..."
-          className="w-full rounded-xl bg-slate-950 border border-slate-700/80 p-3.5 font-mono text-xs text-slate-200 leading-relaxed focus:outline-none focus:ring-1 focus:ring-emerald-500/60 resize-y"
-        />
+        <div className="relative">
+          <textarea
+            rows={3}
+            value={inputText}
+            onChange={(e) => {
+              if (selectedFile) clearFile();
+              setInputText(e.target.value);
+            }}
+            placeholder="Type or paste any text, Unicode string, or code snippet to build its binary tree..."
+            className="w-full rounded-xl bg-surface-0 border border-surface-border p-4 font-mono text-xs text-slate-200 leading-relaxed placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/60 focus:border-emerald-500/50 resize-y transition-colors"
+          />
+          {selectedFile && (
+            <div className="absolute top-2 right-2 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-mono flex items-center gap-2">
+              <span>{selectedFile.name}</span>
+              <button
+                type="button"
+                onClick={clearFile}
+                className="text-rose-400 hover:text-rose-300 ml-1 font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* Action row */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <div className="flex items-center gap-2">
             <input
               type="file"
@@ -247,18 +399,14 @@ export const VisualizerPage: React.FC = () => {
               variant="secondary"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              leftIcon={<Upload className="w-3.5 h-3.5 text-emerald-400" />}
+              leftIcon={<Upload className="w-3.5 h-3.5 text-cyan-400" />}
             >
-              {selectedFile ? selectedFile.name : 'Upload File'}
+              {selectedFile ? 'Change File' : 'Upload File'}
             </Button>
             {selectedFile && (
-              <button
-                type="button"
-                onClick={clearFile}
-                className="text-xs text-rose-400 hover:underline"
-              >
-                Clear file
-              </button>
+              <span className="text-xs text-slate-400 font-mono">
+                {(selectedFile.size / 1024).toFixed(1)} KB
+              </span>
             )}
           </div>
 
@@ -268,75 +416,133 @@ export const VisualizerPage: React.FC = () => {
             onClick={handleAnalyze}
             disabled={isAnalyzing}
             loading={isAnalyzing}
-            leftIcon={<Play className="w-4 h-4" />}
+            leftIcon={<Play className="w-4 h-4 text-slate-950 fill-current" />}
+            className="shadow-glow-emerald"
           >
-            {isAnalyzing ? 'Building Tree in Java…' : 'Generate Huffman Tree'}
+            {isAnalyzing ? 'Constructing Tree in Java 21…' : 'Generate Huffman Tree'}
           </Button>
         </div>
 
         {error && (
-          <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 flex items-center gap-2 text-xs text-rose-300">
-            <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-            {error}
+          <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-800/60 flex items-center gap-2.5 text-xs text-rose-300 animate-slide-down">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
       </div>
 
-      {/* Results */}
+      {/* Results Workspace */}
       {result && (
-        <div className="space-y-6">
-          {/* Summary metrics */}
+        <div className="space-y-8 animate-fade-in">
+          {/* Summary Metric Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <MetricCard label="Characters" value={result.characterCount.toLocaleString()} accent="slate" />
-            <MetricCard label="Unique Symbols" value={result.uniqueCharacterCount.toLocaleString()} accent="emerald" />
-            <MetricCard label="Raw Bits (8b)" value={rawBits.toLocaleString()} accent="slate" />
-            <MetricCard label="Encoded Bits" value={result.encodedBitCount.toLocaleString()} accent="emerald" />
-            <MetricCard label="Avg Bit/Char" value={`${avgBitLength}b`} accent="indigo" />
-            <MetricCard label="Theory Savings" value={`${result.percentageSaved.toFixed(1)}%`} accent="emerald" />
+            <MetricCard
+              label="Characters"
+              value={result.characterCount.toLocaleString()}
+              accent="slate"
+              sub="Total code points"
+            />
+            <MetricCard
+              label="Unique Symbols"
+              value={result.uniqueCharacterCount.toLocaleString()}
+              accent="emerald"
+              sub="Tree leaf count"
+            />
+            <MetricCard
+              label="Raw Bits (8b)"
+              value={rawBits.toLocaleString()}
+              accent="slate"
+              sub="Uncompressed"
+            />
+            <MetricCard
+              label="Encoded Bits"
+              value={result.encodedBitCount.toLocaleString()}
+              accent="cyan"
+              sub="Payload bits"
+            />
+            <MetricCard
+              label="Avg Bit / Char"
+              value={`${avgBitLength}b`}
+              accent="indigo"
+              sub="Entropy rate"
+            />
+            <MetricCard
+              label="Theory Savings"
+              value={`${result.percentageSaved.toFixed(1)}%`}
+              accent="emerald"
+              trend={result.percentageSaved > 0 ? `+${result.percentageSaved.toFixed(1)}%` : undefined}
+              sub="Excl. header overhead"
+            />
           </div>
 
-          {/* SVG Tree */}
-          <div className="rounded-xl border border-slate-800/80 bg-[#14141c] overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/60">
+          {/* Interactive Tree Canvas Card */}
+          <div className="glass-card rounded-2xl overflow-hidden shadow-glow-card border border-surface-border">
+            {/* Canvas Toolbar */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-b border-surface-border bg-surface-1/90 backdrop-blur-md gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-100">Interactive Huffman Binary Tree</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Left branches = 0 · Right branches = 1 · Hover code table rows to trace path
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-100">
+                    Interactive Huffman Binary Tree
+                  </h3>
+                  <Badge variant="emerald" className="text-[10px]">
+                    Live Canvas
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Left branches = <span className="text-cyan-400 font-mono font-bold">0</span> · Right branches ={' '}
+                  <span className="text-indigo-400 font-mono font-bold">1</span> · Drag to pan · Click or hover node to trace
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Viewport & Path controls */}
+              <div className="flex items-center gap-2 flex-wrap">
                 {highlightedCode && (
                   <Button
                     variant="ghost"
                     size="xs"
                     onClick={() => setHighlightedCode(null)}
-                    leftIcon={<RotateCcw className="w-3 h-3" />}
+                    leftIcon={<RotateCcw className="w-3 h-3 text-emerald-400" />}
                   >
                     Reset Trace
                   </Button>
                 )}
-                <div className="flex items-center gap-1 border border-slate-700/60 rounded-lg p-0.5">
+
+                <div className="flex items-center gap-1 border border-surface-border bg-surface-0 rounded-lg p-1">
                   <button
-                    onClick={() => setZoom((z) => Math.max(0.4, z - 0.15))}
-                    className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
-                    aria-label="Zoom out"
+                    onClick={() => setZoom((z) => Math.max(0.3, Number((z - 0.15).toFixed(2))))}
+                    className="p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-surface-2 transition-colors"
+                    title="Zoom Out"
+                    aria-label="Zoom Out"
                   >
                     <ZoomOut className="w-3.5 h-3.5" />
                   </button>
-                  <span className="text-xs font-mono text-slate-500 px-1 min-w-[36px] text-center">
+                  <span className="text-xs font-mono text-slate-300 px-1.5 min-w-[42px] text-center select-none font-semibold">
                     {Math.round(zoom * 100)}%
                   </span>
                   <button
-                    onClick={() => setZoom((z) => Math.min(2, z + 0.15))}
-                    className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
-                    aria-label="Zoom in"
+                    onClick={() => setZoom((z) => Math.min(2.5, Number((z + 0.15).toFixed(2))))}
+                    className="p-1.5 rounded text-slate-400 hover:text-slate-100 hover:bg-surface-2 transition-colors"
+                    title="Zoom In"
+                    aria-label="Zoom In"
                   >
                     <ZoomIn className="w-3.5 h-3.5" />
                   </button>
+                  <div className="w-px h-4 bg-surface-border mx-0.5" />
                   <button
-                    onClick={() => setZoom(1)}
-                    className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors"
-                    aria-label="Fit to screen"
+                    onClick={() => {
+                      setZoom(1);
+                      setPan({ x: 0, y: 0 });
+                    }}
+                    className="px-2 py-1 rounded text-[11px] font-mono text-slate-400 hover:text-slate-200 hover:bg-surface-2 transition-colors"
+                    title="Reset to 100%"
+                  >
+                    1:1
+                  </button>
+                  <button
+                    onClick={handleFitScreen}
+                    className="p-1.5 rounded text-slate-400 hover:text-emerald-300 hover:bg-surface-2 transition-colors"
+                    title="Fit to Screen"
+                    aria-label="Fit to Screen"
                   >
                     <Maximize2 className="w-3.5 h-3.5" />
                   </button>
@@ -344,48 +550,119 @@ export const VisualizerPage: React.FC = () => {
               </div>
             </div>
 
-            {treeLayout ? (
-              <div className="w-full overflow-x-auto bg-slate-950/80 p-4 min-h-[420px]">
+            {/* Canvas Area */}
+            <div
+              ref={canvasRef}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              className={`relative w-full h-[540px] overflow-hidden bg-surface-0 bg-dot-pattern select-none ${
+                isPanning ? 'cursor-grabbing' : 'cursor-grab'
+              }`}
+            >
+              {/* Radial subtle ambient glow at center */}
+              <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_30%,rgba(16,185,129,0.06),transparent_60%)]" />
+
+              {treeLayout ? (
                 <div
                   style={{
-                    transform: `scale(${zoom})`,
-                    transformOrigin: 'top center',
-                    transition: 'transform 0.2s ease',
-                    display: 'inline-block',
-                    minWidth: treeLayout.totalWidth,
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                    transformOrigin: '0 0',
+                    transition: isPanning ? 'none' : 'transform 0.15s ease-out',
+                    width: treeLayout.totalWidth,
+                    height: treeLayout.totalHeight,
                   }}
+                  className="relative pointer-events-auto"
                 >
                   <svg
                     width={treeLayout.totalWidth}
                     height={treeLayout.totalHeight}
-                    className="mx-auto block"
+                    className="block"
                   >
-                    {/* Edges */}
+                    <defs>
+                      {/* Active glow filter */}
+                      <filter id="emerald-glow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="4" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                      </filter>
+
+                      {/* Leaf gradient */}
+                      <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#064e3b" />
+                        <stop offset="100%" stopColor="#022c22" />
+                      </linearGradient>
+
+                      {/* Active leaf gradient */}
+                      <linearGradient id="activeLeafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#059669" />
+                        <stop offset="100%" stopColor="#047857" />
+                      </linearGradient>
+
+                      {/* Internal node gradient */}
+                      <linearGradient id="internalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#1e293b" />
+                        <stop offset="100%" stopColor="#0f172a" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Edge connections */}
                     {edgesList.map((edge, idx) => {
-                      const isEdgeActive = highlightedCode !== null && highlightedCode.startsWith(edge.childCode);
+                      const isEdgeActive =
+                        highlightedCode !== null && highlightedCode.startsWith(edge.childCode);
                       const isEdgeDimmed = highlightedCode !== null && !isEdgeActive;
+
                       return (
                         <g key={`edge-${idx}`}>
                           <line
-                            x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2}
-                            stroke={isEdgeActive ? '#10b981' : isEdgeDimmed ? '#1e293b' : '#334155'}
-                            strokeWidth={isEdgeActive ? 3 : 1.5}
+                            x1={edge.x1}
+                            y1={edge.y1}
+                            x2={edge.x2}
+                            y2={edge.y2}
+                            stroke={
+                              isEdgeActive
+                                ? '#10b981'
+                                : isEdgeDimmed
+                                ? '#1e293b'
+                                : '#334155'
+                            }
+                            strokeWidth={isEdgeActive ? 3.5 : 1.5}
                             strokeLinecap="round"
+                            filter={isEdgeActive ? 'url(#emerald-glow)' : undefined}
                             className="transition-colors duration-200"
                           />
+                          {/* Bit badge on branch */}
                           <circle
                             cx={(edge.x1 + edge.x2) / 2}
                             cy={(edge.y1 + edge.y2) / 2}
-                            r={10}
-                            fill={isEdgeActive ? '#064e3b' : edge.bit === '0' ? '#0f172a' : '#1e1b4b'}
-                            stroke={isEdgeActive ? '#10b981' : edge.bit === '0' ? '#0284c7' : '#a855f7'}
-                            strokeWidth={1.2}
+                            r={11}
+                            fill={
+                              isEdgeActive
+                                ? '#064e3b'
+                                : edge.bit === '0'
+                                ? '#083344'
+                                : '#1e1b4b'
+                            }
+                            stroke={
+                              isEdgeActive
+                                ? '#34d399'
+                                : edge.bit === '0'
+                                ? '#06b6d4'
+                                : '#818cf8'
+                            }
+                            strokeWidth={isEdgeActive ? 2 : 1.2}
                           />
                           <text
                             x={(edge.x1 + edge.x2) / 2}
                             y={(edge.y1 + edge.y2) / 2 + 4}
                             textAnchor="middle"
-                            fill={isEdgeActive ? '#6ee7b7' : '#94a3b8'}
+                            fill={
+                              isEdgeActive
+                                ? '#6ee7b7'
+                                : edge.bit === '0'
+                                ? '#67e8f9'
+                                : '#c7d2fe'
+                            }
                             fontSize={11}
                             fontFamily="monospace"
                             fontWeight="bold"
@@ -399,55 +676,117 @@ export const VisualizerPage: React.FC = () => {
                     {/* Nodes */}
                     {nodesList.map((item, idx) => {
                       const isLeaf = item.isLeaf;
-                      const code = item.node.code || '';
-                      const isTargetLeaf = highlightedCode !== null && isLeaf && highlightedCode === code;
-                      const isAncestorNode = highlightedCode !== null && !isLeaf && highlightedCode.startsWith(code);
-                      const isDimmed = highlightedCode !== null && !isTargetLeaf && !isAncestorNode;
+                      const code = item.path;
+                      const isTargetLeaf =
+                        highlightedCode !== null && isLeaf && highlightedCode === code;
+                      const isAncestorNode =
+                        highlightedCode !== null && !isLeaf && highlightedCode.startsWith(code);
+                      const isDimmed =
+                        highlightedCode !== null && !isTargetLeaf && !isAncestorNode;
 
                       if (isLeaf) {
                         return (
                           <g
                             key={`node-${idx}`}
-                            className="cursor-pointer"
-                            onClick={() => setHighlightedCode(code)}
+                            className="cursor-pointer group"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHighlightedCode(code);
+                            }}
                           >
+                            {/* Leaf card container */}
                             <rect
-                              x={item.x - 30} y={item.y - 18} width={60} height={44} rx={8}
-                              fill={isTargetLeaf ? '#047857' : isDimmed ? '#091512' : '#064e3b'}
-                              stroke={isTargetLeaf ? '#34d399' : isDimmed ? '#064e3b' : '#10b981'}
-                              strokeWidth={isTargetLeaf ? 2.5 : 1.5}
+                              x={item.x - 34}
+                              y={item.y - 22}
+                              width={68}
+                              height={50}
+                              rx={10}
+                              fill={
+                                isTargetLeaf
+                                  ? 'url(#activeLeafGrad)'
+                                  : isDimmed
+                                  ? '#061310'
+                                  : 'url(#leafGrad)'
+                              }
+                              stroke={
+                                isTargetLeaf
+                                  ? '#34d399'
+                                  : isDimmed
+                                  ? '#064e3b'
+                                  : '#10b981'
+                              }
+                              strokeWidth={isTargetLeaf ? 3 : 1.6}
+                              filter={isTargetLeaf ? 'url(#emerald-glow)' : undefined}
+                              className="transition-all duration-200"
                             />
+                            {/* Symbol glyph */}
                             <text
-                              x={item.x} y={item.y - 1}
-                              textAnchor="middle" fill="#f8fafc"
-                              fontSize={13} fontWeight="bold" fontFamily="monospace"
+                              x={item.x}
+                              y={item.y - 1}
+                              textAnchor="middle"
+                              fill="#f8fafc"
+                              fontSize={14}
+                              fontWeight="bold"
+                              fontFamily="monospace"
                             >
                               {item.node.displayCharacter}
                             </text>
+                            {/* Frequency count */}
                             <text
-                              x={item.x} y={item.y + 15}
-                              textAnchor="middle" fill="#a7f3d0"
-                              fontSize={10} fontFamily="monospace"
+                              x={item.x}
+                              y={item.y + 17}
+                              textAnchor="middle"
+                              fill={isTargetLeaf ? '#ecfdf5' : '#a7f3d0'}
+                              fontSize={10}
+                              fontFamily="monospace"
+                              fontWeight="600"
                             >
-                              {item.node.frequency}
+                              freq: {item.node.frequency}
                             </text>
                           </g>
                         );
                       }
 
+                      // Internal node
                       return (
-                        <g key={`node-${idx}`}>
+                        <g
+                          key={`node-${idx}`}
+                          className="cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (code) setHighlightedCode(code);
+                          }}
+                        >
                           <circle
-                            cx={item.x} cy={item.y} r={18}
-                            fill={isAncestorNode ? '#047857' : isDimmed ? '#090d16' : '#0f172a'}
-                            stroke={isAncestorNode ? '#34d399' : isDimmed ? '#1e293b' : '#475569'}
-                            strokeWidth={isAncestorNode ? 2.5 : 1.5}
+                            cx={item.x}
+                            cy={item.y}
+                            r={20}
+                            fill={
+                              isAncestorNode
+                                ? '#064e3b'
+                                : isDimmed
+                                ? '#090d16'
+                                : 'url(#internalGrad)'
+                            }
+                            stroke={
+                              isAncestorNode
+                                ? '#34d399'
+                                : isDimmed
+                                ? '#1e293b'
+                                : '#475569'
+                            }
+                            strokeWidth={isAncestorNode ? 3 : 1.5}
+                            filter={isAncestorNode ? 'url(#emerald-glow)' : undefined}
+                            className="transition-all duration-200"
                           />
                           <text
-                            x={item.x} y={item.y + 4}
+                            x={item.x}
+                            y={item.y + 4.5}
                             textAnchor="middle"
-                            fill={isAncestorNode ? '#f8fafc' : '#cbd5e1'}
-                            fontSize={11} fontFamily="monospace" fontWeight="600"
+                            fill={isAncestorNode ? '#f8fafc' : '#94a3b8'}
+                            fontSize={11}
+                            fontFamily="monospace"
+                            fontWeight="bold"
                           >
                             {item.node.frequency}
                           </text>
@@ -456,69 +795,203 @@ export const VisualizerPage: React.FC = () => {
                     })}
                   </svg>
                 </div>
+              ) : null}
+
+              {/* Floating Canvas Navigation Hint */}
+              <div className="absolute bottom-3 left-4 pointer-events-none text-[11px] font-mono text-slate-500 bg-surface-0/80 px-2.5 py-1 rounded-md border border-surface-border backdrop-blur-sm">
+                Pan: Click + Drag · Zoom: Wheel or Buttons
               </div>
-            ) : null}
+            </div>
           </div>
 
-          {/* Code Table + Frequency Chart */}
+          {/* Selected Character Inspector (Active Callout) */}
+          {selectedEntry && (
+            <div className="glass-card rounded-2xl p-5 border border-emerald-500/30 bg-emerald-950/20 shadow-glow-emerald animate-slide-down">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+                <div className="flex items-center gap-4">
+                  {/* Large symbol glyph display */}
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-3xl font-mono font-bold text-white shadow-inner">
+                    {selectedEntry.displayCharacter}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-base font-bold text-slate-100">
+                        Symbol Inspector
+                      </span>
+                      <Badge variant="emerald">
+                        U+{selectedEntry.codePoint.toString(16).toUpperCase().padStart(4, '0')}
+                      </Badge>
+                      <Badge variant="cyan">
+                        Freq: {selectedEntry.frequency.toLocaleString()}
+                      </Badge>
+                      <Badge variant="indigo">
+                        {selectedEntry.bitLength} bits
+                      </Badge>
+                    </div>
+
+                    {/* Path breadcrumb */}
+                    <div className="flex items-center gap-1.5 mt-2 text-xs font-mono text-slate-300 flex-wrap">
+                      <span className="text-slate-500 flex items-center gap-1">
+                        <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                        Root
+                      </span>
+                      {selectedEntry.code.split('').map((bit, idx) => (
+                        <React.Fragment key={idx}>
+                          <ChevronRight className="w-3 h-3 text-slate-600" />
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                              bit === '0'
+                                ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/30'
+                                : 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/30'
+                            }`}
+                          >
+                            {bit === '0' ? '0 (Left)' : '1 (Right)'}
+                          </span>
+                        </React.Fragment>
+                      ))}
+                      <ChevronRight className="w-3 h-3 text-slate-600" />
+                      <span className="text-emerald-400 font-bold">
+                        Leaf [{selectedEntry.displayCharacter}]
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Binary Code with Copy */}
+                <div className="flex items-center gap-3">
+                  <div className="bg-surface-0 border border-surface-border px-3.5 py-2 rounded-xl flex items-center gap-3">
+                    <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
+                      Huffman Code:
+                    </span>
+                    <span className="font-mono text-emerald-300 font-bold text-sm tracking-widest">
+                      {selectedEntry.code}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(selectedEntry.code)}
+                      className="p-1 rounded text-slate-400 hover:text-slate-200 transition-colors"
+                      title="Copy bitstring"
+                    >
+                      {copiedCode ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setHighlightedCode(null)}
+                    leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                  >
+                    Clear Trace
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Code Table & Symbol Frequency Distribution Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Code Table */}
-            <div className="rounded-xl border border-slate-800/80 bg-[#14141c] overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/60">
+            {/* Prefix-Free Code Table Card */}
+            <div className="glass-card rounded-2xl overflow-hidden border border-surface-border">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-5 py-4 border-b border-surface-border gap-3 bg-surface-1/80">
                 <div>
-                  <p className="text-sm font-semibold text-slate-100">Prefix-Free Code Table</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Variable-length bit sequences — hover to trace tree path
+                  <h4 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                    Prefix-Free Code Table
+                    <Badge variant="slate" className="text-[10px]">
+                      {sortedAndFilteredCodeTable.length} symbols
+                    </Badge>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Click or hover rows to trace bit paths in the tree
                   </p>
                 </div>
-                <div className="relative w-44">
-                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+
+                {/* Search query input */}
+                <div className="relative w-full sm:w-48">
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
                   <input
                     type="text"
                     value={filterQuery}
                     onChange={(e) => setFilterQuery(e.target.value)}
-                    placeholder="Search symbol…"
-                    className="w-full bg-slate-900 border border-slate-700/80 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500/60"
+                    placeholder="Filter symbol/code…"
+                    className="w-full bg-surface-0 border border-surface-border rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-500/60 transition-colors"
                   />
                 </div>
               </div>
-              <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+
+              {/* Table Container */}
+              <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-900/90 text-slate-500 sticky top-0 border-b border-slate-800">
+                  <thead className="bg-surface-0 text-slate-400 sticky top-0 border-b border-surface-border z-10">
                     <tr>
-                      <th className="text-[10px] uppercase tracking-wider py-2.5 px-3 font-semibold">Symbol</th>
-                      <th className="text-[10px] uppercase tracking-wider py-2.5 px-3 font-semibold">Unicode</th>
-                      <th className="text-[10px] uppercase tracking-wider py-2.5 px-3 font-semibold">Freq</th>
-                      <th className="text-[10px] uppercase tracking-wider py-2.5 px-3 font-semibold">Code</th>
-                      <th className="text-[10px] uppercase tracking-wider py-2.5 px-3 font-semibold">Bits</th>
+                      <th
+                        onClick={() => handleSort('symbol')}
+                        className="py-2.5 px-4 font-semibold cursor-pointer hover:text-slate-200 select-none"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          Symbol
+                          <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                        </div>
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold">Unicode</th>
+                      <th
+                        onClick={() => handleSort('frequency')}
+                        className="py-2.5 px-3 font-semibold cursor-pointer hover:text-slate-200 select-none"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          Freq
+                          <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                        </div>
+                      </th>
+                      <th className="py-2.5 px-3 font-semibold">Code</th>
+                      <th
+                        onClick={() => handleSort('bitLength')}
+                        className="py-2.5 px-4 font-semibold cursor-pointer hover:text-slate-200 select-none text-right"
+                      >
+                        <div className="flex items-center justify-end gap-1.5">
+                          Bits
+                          <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                        </div>
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/40 font-mono">
-                    {filteredCodeTable.map((entry) => {
+                  <tbody className="divide-y divide-surface-border font-mono">
+                    {sortedAndFilteredCodeTable.map((entry) => {
                       const isRowActive = highlightedCode === entry.code;
                       return (
                         <tr
                           key={entry.codePoint}
                           onMouseEnter={() => setHighlightedCode(entry.code)}
-                          onMouseLeave={() => !isRowActive && setHighlightedCode(null)}
                           onClick={() => setHighlightedCode(entry.code)}
                           className={`cursor-pointer transition-colors ${
                             isRowActive
-                              ? 'bg-emerald-950/50 border-l-2 border-emerald-400'
-                              : 'hover:bg-slate-800/40'
+                              ? 'bg-emerald-950/40 border-l-2 border-emerald-400'
+                              : 'hover:bg-surface-2/60'
                           }`}
                         >
-                          <td className="py-2 px-3 font-bold text-white">
-                            <span className="px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-xs">
+                          <td className="py-2.5 px-4 font-bold text-white">
+                            <span className="inline-block px-2 py-0.5 rounded-md bg-surface-2 border border-surface-border text-xs min-w-[24px] text-center">
                               {entry.displayCharacter}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-slate-500 text-[11px]">
+                          <td className="py-2.5 px-3 text-slate-400 text-[11px]">
                             U+{entry.codePoint.toString(16).toUpperCase().padStart(4, '0')}
                           </td>
-                          <td className="py-2 px-3 text-slate-300">{entry.frequency.toLocaleString()}</td>
-                          <td className="py-2 px-3 text-emerald-400 font-bold tracking-widest">{entry.code}</td>
-                          <td className="py-2 px-3 text-slate-500">{entry.bitLength}</td>
+                          <td className="py-2.5 px-3 text-slate-300 font-semibold">
+                            {entry.frequency.toLocaleString()}
+                          </td>
+                          <td className="py-2.5 px-3 text-emerald-400 font-bold tracking-wider">
+                            {entry.code}
+                          </td>
+                          <td className="py-2.5 px-4 text-slate-400 text-right">
+                            <span className="px-1.5 py-0.5 rounded bg-surface-2 text-[11px]">
+                              {entry.bitLength}
+                            </span>
+                          </td>
                         </tr>
                       );
                     })}
@@ -527,16 +1000,27 @@ export const VisualizerPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Frequency Chart */}
-            <div className="rounded-xl border border-slate-800/80 bg-[#14141c] overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-800/60">
-                <p className="text-sm font-semibold text-slate-100">Symbol Frequency Distribution</p>
-                <p className="text-xs text-slate-500 mt-0.5">Top 20 most frequent characters</p>
+            {/* Frequency Bar Chart Card */}
+            <div className="glass-card rounded-2xl overflow-hidden border border-surface-border">
+              <div className="px-5 py-4 border-b border-surface-border bg-surface-1/80">
+                <h4 className="text-sm font-semibold text-slate-100">
+                  Symbol Frequency Distribution
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Top 20 most frequent characters and relative proportions
+                </p>
               </div>
-              <div className="p-4 h-[360px]">
+
+              <div className="p-5 h-[380px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.6} />
+                  <BarChart data={chartData} margin={{ top: 12, right: 12, left: -16, bottom: 24 }}>
+                    <defs>
+                      <linearGradient id="barGlow" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.9} />
+                        <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.6} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.5} />
                     <XAxis
                       dataKey="name"
                       stroke="#475569"
@@ -547,56 +1031,32 @@ export const VisualizerPage: React.FC = () => {
                     <YAxis stroke="#475569" fontSize={11} tick={{ fill: '#64748b' }} />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: '#0f172a',
+                        backgroundColor: '#090d16',
                         borderColor: '#1e293b',
                         borderRadius: '0.75rem',
                         fontSize: '12px',
                         color: '#f8fafc',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
                       }}
-                      formatter={(value: number, _name: string, props: { payload?: { percentage?: string } }) => [
-                        `${value} (${props.payload?.percentage ?? ''}%)`,
-                        'Frequency',
-                      ]}
+                      formatter={(
+                        value: number,
+                        _name: string,
+                        props: { payload?: { percentage?: string } }
+                      ) => [`${value} (${props.payload?.percentage ?? ''}%)`, 'Occurrences']}
                     />
-                    <Bar dataKey="frequency" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="frequency" fill="url(#barGlow)" radius={[6, 6, 0, 0]}>
+                      {chartData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={index === 0 ? '#34d399' : 'url(#barGlow)'}
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
           </div>
-
-          {/* Highlighted code info */}
-          {highlightedCode && (() => {
-            const entry = result.codeTable.find((e) => e.code === highlightedCode);
-            if (!entry) return null;
-            return (
-              <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-4 flex items-center justify-between flex-wrap gap-4 animate-fade-in">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-2xl font-bold text-white">
-                    {entry.displayCharacter}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="emerald">U+{entry.codePoint.toString(16).toUpperCase().padStart(4, '0')}</Badge>
-                      <Badge variant="slate">freq: {entry.frequency}</Badge>
-                      <Badge variant="indigo">{entry.bitLength} bits</Badge>
-                    </div>
-                    <p className="font-mono text-emerald-300 text-sm font-bold tracking-widest mt-1">
-                      {entry.code}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setHighlightedCode(null)}
-                  leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
-                >
-                  Clear selection
-                </Button>
-              </div>
-            );
-          })()}
         </div>
       )}
     </div>
