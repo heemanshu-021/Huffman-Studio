@@ -1,6 +1,6 @@
 # Huffman Studio
 
-A full-stack, university-level text compression suite powered by an authentic **Java 21** implementation of the **Huffman Coding Algorithm** and an interactive **React + TypeScript + Tailwind CSS** frontend.
+A production-grade, university-level text compression platform powered by an authentic **Java 21** implementation of the **Huffman Coding Algorithm** and an interactive, modern **React 18 + TypeScript + Tailwind CSS** developer workspace.
 
 ---
 
@@ -8,42 +8,149 @@ A full-stack, university-level text compression suite powered by an authentic **
 
 - [Overview](#overview)
 - [Key Features & Capabilities](#key-features--capabilities)
-- [Technology Stack](#technology-stack)
 - [System Architecture](#system-architecture)
+- [Algorithmic Pipeline & Workflow](#algorithmic-pipeline--workflow)
+- [Binary `.huf` Archive Specification](#binary-huf-archive-specification)
+- [Technology Stack](#technology-stack)
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
-- [Installation & Setup](#installation--setup)
-- [Running the Applications](#running-the-applications)
+- [Installation & Quick Start](#installation--quick-start)
 - [API Documentation](#api-documentation)
-- [Development Roadmap](#development-roadmap)
+- [Testing & Quality Assurance](#testing--quality-assurance)
+- [Viva & Technical Evaluation Guide](#viva--technical-evaluation-guide)
+- [Known Limitations](#known-limitations)
+- [Engineering Roadmap](#engineering-roadmap)
 - [License](#license)
 
 ---
 
 ## Overview
 
-**Huffman Studio** is designed as a rigorous educational and production-grade demonstration of **Greedy Prefix Coding**. Unlike trivial demonstrations, Huffman Studio features:
+**Huffman Studio** is engineered as a mathematically rigorous, fully realized demonstration of **Greedy Variable-Length Prefix Coding**. Unlike superficial academic demonstrations that merely simulate bit operations by saving ASCII string representations (e.g., storing `"0101"` as 4 bytes of text), Huffman Studio implements **authentic bit-level byte packing** and produces genuine binary `.huf` archive files.
 
-* **True Bit-Level Compression**: Implements bit-packing streams in pure Java that convert variable-length prefix codes into compact 8-bit byte arrays.
-* **Autonomous `.huf` Binary Container**: Generates self-contained archive files embedding serialized tree structures/frequency headers for independent decompression across restarts.
-* **Decoupled Client-Server Model**: High-performance Java 21 Spring Boot backend orchestrating algorithm operations, connected via RESTful JSON and streaming APIs to a reactive TypeScript/Tailwind frontend.
-* **Interactive Visualizations**: Interactive tree exploration and frequency metrics designed for academic evaluation and viva presentations.
+The application features:
+* **True Bit-Level Compression**: Pure Java bitstream input/output (`BitWriter` and `BitReader`) packing variable-length binary codes into standard 8-bit bytes.
+* **Autonomous `.huf` Binary Container**: Standalone container format containing a 29-byte fixed header, preorder serialized tree topology, and packed bits — allowing independent decompression across machines without external frequency tables.
+* **Decoupled Client-Server Model**: High-performance Java 21 Spring Boot backend orchestrating algorithm operations, exposed via RESTful JSON and streaming APIs to a reactive TypeScript/Tailwind frontend.
+* **Interactive Visualizations**: Dynamic SVG binary tree renderer with pan, zoom, and root-to-leaf path tracing, plus frequency distribution analytics.
+* **Lossless Round-Trip Guarantee**: Cryptographic-grade data integrity validation via 32-bit CRC (IEEE 802.3).
+
+---
+
+## Key Features & Capabilities
+
+- **Real Binary Compression**: Generates self-contained `.huf` binary archives with versioned headers and preorder serialized tree topologies.
+- **Full Unicode (UTF-8) Spectrum**: Complete support for multi-byte Unicode code points ($0\text{ to }0x10FFFF$), including Devanagari (Hindi), Chinese, Arabic, Japanese, emojis, and extended symbols.
+- **Honest Statistics & Container Overhead**: Transparent reporting of exact byte savings, compression ratios, and clear educational notices when container overhead exceeds bit savings on small inputs.
+- **CRC-32 Integrity Verification**: Embedded 32-bit checksums prevent data corruption, rejecting tampered files with HTTP `422 Unprocessable Entity`.
+- **Interactive Tree Visualizer**: Real-time rendering of backend-generated Huffman trees with pan/zoom controls, search filters, and active bit-path highlighting on hover.
+- **Session-Wide Analytics**: In-browser session tracker recording cumulative operations, files processed, and aggregate net bytes saved.
+- **Developer-Grade UI**: Polished dark theme, collapsible sidebar navigation, step indicators, loading states, and toast notifications.
+
+---
+
+## System Architecture
+
+Huffman Studio strictly enforces **Separation of Concerns (SoC)** and **Clean Layered Architecture**. The frontend handles user interaction and rendering, while the backend handles CPU-bound algorithmic computation and bitstream I/O.
+
+```mermaid
+flowchart TD
+    subgraph Frontend["Frontend Client (React 18 + Vite + TypeScript)"]
+        UI["Pages: Dashboard, Compressor, Decompressor, Visualizer, How It Works"]
+        State["Hooks: useSessionStats, useHealthCheck, useToast"]
+        APIClient["API Layer: apiClient.ts, services/*.ts"]
+        UI --> State
+        State --> APIClient
+    end
+
+    subgraph Backend["Backend Server (Java 21 + Spring Boot 3.3.5)"]
+        Controllers["Controllers: /api/compress, /api/decompress, /api/analyze, /api/health"]
+        Services["Services: CompressionApiService, DecompressionApiService, AnalysisApiService"]
+        Archive["Archive Engine: HuffmanArchiveService, BitWriter, BitReader, ArchiveFormat"]
+        Core["Algorithm Engine: FrequencyCounter, HuffmanTreeBuilder, HuffmanCodeGenerator, HuffmanEncoder/Decoder"]
+        
+        Controllers --> Services
+        Services --> Archive
+        Archive --> Core
+    end
+
+    APIClient <-->|"HTTP REST / Multipart Streams (Port 8080)"| Controllers
+```
+
+---
+
+## Algorithmic Pipeline & Workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User / Browser
+    participant CompPage as CompressorPage
+    participant API as Spring Boot API
+    participant Engine as Java Huffman Engine
+    participant Arch as Archive Writer
+
+    User->>CompPage: Uploads sample.txt
+    CompPage->>API: POST /api/compress (multipart/form-data)
+    API->>Engine: Count code-point frequencies (FrequencyCounter)
+    API->>Engine: Build Min-Heap & Huffman Tree (PriorityQueue)
+    API->>Engine: Generate prefix-free codes (DFS traversal)
+    API->>Engine: Encode text to bitstream (HuffmanEncoder)
+    API->>Arch: Pack bits into bytes (BitWriter) & serialize preorder tree
+    Arch->>Arch: Compute CRC-32 & assemble 29-byte header
+    Arch-->>API: Binary .huf byte array + X-* headers
+    API-->>CompPage: HTTP 200 (application/octet-stream) + metrics
+    CompPage-->>User: Auto-downloads sample.huf & renders metrics card
+```
+
+---
+
+## Binary `.huf` Archive Specification
+
+Every `.huf` file generated by Huffman Studio is completely autonomous. The binary format contains:
+
+```
++-----------------------------------------------------------------------------+
+|                          HUF BINARY ARCHIVE LAYOUT                          |
+|                                                                             |
+|  +-------------------------+-------------------------+--------------------+ |
+|  |   FIXED HEADER (29 B)   |   SERIALIZED TREE (Var) |   PAYLOAD (Var)    | |
+|  +-------------------------+-------------------------+--------------------+ |
+|  0                         29                        29+T                 End
++-----------------------------------------------------------------------------+
+```
+
+### Fixed Header Layout (29 Bytes)
+
+| Offset | Size | Field Name | Type | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `0 .. 3` | 4 B | **Magic Signature** | ASCII | `"HUFN"` (`0x48 0x55 0x46 0x4E`). File identifier. |
+| `4` | 1 B | **Format Version** | Byte | `0x01` (Version 1). |
+| `5 .. 12` | 8 B | **Code Point Count** | Big-Endian Long | Number of Unicode characters in original text. |
+| `13 .. 20` | 8 B | **Bit Count** | Big-Endian Long | Exact meaningful encoded bit count (ignores padding). |
+| `21 .. 24` | 4 B | **Tree Node Count** | Big-Endian Int | Number of serialized tree nodes. |
+| `25 .. 28` | 4 B | **CRC-32 Checksum** | Big-Endian Int | IEEE 802.3 checksum of original UTF-8 bytes. |
+
+### Preorder Tree Serialization
+- **Leaf Node (`0x01`)**: 1-byte marker followed by a 4-byte Unicode code point (int).
+- **Internal Node (`0x00`)**: 1-byte marker followed by recursive serialization of left and right subtrees.
 
 ---
 
 ## Technology Stack
 
-### Frontend
-- **Framework**: React 19 with TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS
-- **Routing**: React Router DOM (v7)
+### Frontend Architecture
+- **Framework**: React 18 with TypeScript 5.6
+- **Build Tool**: Vite 5.4
+- **Styling**: Tailwind CSS 3.4 with custom design tokens
+- **Routing**: React Router DOM v6
 - **Icons**: Lucide React
-- **Data Visualization**: Recharts
+- **Data Visualization**: Recharts (symbol frequency distributions)
+- **Typography**: Inter (UI font) & JetBrains Mono (monospace metrics & code tables)
 
-### Backend
+### Backend Architecture
 - **Runtime**: Java 21 (OpenJDK 21 LTS)
-- **Framework**: Spring Boot 3
+- **Framework**: Spring Boot 3.3.5
 - **Build & Dependency Management**: Apache Maven & Maven Wrapper (`./mvnw`)
 - **Web & Validation**: Spring Web MVC, Jakarta Bean Validation
 - **Testing**: JUnit 5, Spring Boot Test, AssertJ
@@ -55,49 +162,49 @@ A full-stack, university-level text compression suite powered by an authentic **
 ```
 Huffman-Studio/
 ├── backend/                        # Java 21 Spring Boot Backend
-│   ├── .mvn/                       # Maven Wrapper files
+│   ├── .mvn/                       # Maven Wrapper configuration
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/com/huffmanstudio/
 │   │   │   │   ├── HuffmanStudioApplication.java
-│   │   │   │   ├── algorithm/      # Core Huffman coding engine (Phase 2)
-│   │   │   │   ├── archive/        # Real binary .huf compression & archive I/O (Phase 3)
-│   │   │   │   ├── config/         # CORS and web configuration
-│   │   │   │   ├── controller/     # REST controllers (Health, Compress, etc.)
-│   │   │   │   ├── dto/            # Data transfer contracts
-│   │   │   │   ├── exception/      # Centralized exception handling
-│   │   │   │   ├── model/          # HuffmanNode, HuffmanTree domain models & stats
-│   │   │   │   └── service/        # Business logic orchestration
+│   │   │   │   ├── algorithm/      # FrequencyCounter, TreeBuilder, CodeGenerator, Encoder, Decoder
+│   │   │   │   ├── archive/        # ArchiveFormat, BitWriter, BitReader, ArchiveWriter, ArchiveReader
+│   │   │   │   ├── config/         # CORS and Spring Web configuration
+│   │   │   │   ├── controller/     # Compression, Decompression, Analysis, Health REST controllers
+│   │   │   │   ├── dto/            # Data transfer contracts (TreeNodeDto, AnalysisResponse, etc.)
+│   │   │   │   ├── exception/      # Centralized exception hierarchy (CorruptedArchiveException, etc.)
+│   │   │   │   ├── model/          # HuffmanNode, HuffmanTree, ArchiveStatistics domain entities
+│   │   │   │   └── service/        # CompressionApiService, DecompressionApiService, AnalysisApiService
 │   │   │   └── resources/
-│   │   │       └── application.yml # Spring Boot configuration
-│   │   └── test/                   # JUnit 5 integration & unit tests
+│   │   │       └── application.yml # Port 8080 & multipart upload configuration
+│   │   └── test/                   # Comprehensive JUnit 5 test suite (188 tests)
 │   ├── mvnw                        # Unix Maven Wrapper script
 │   ├── mvnw.cmd                    # Windows Maven Wrapper script
 │   └── pom.xml                     # Maven project definition
-├── frontend/                       # React + TypeScript + Vite Frontend
+├── frontend/                       # React 18 + TypeScript + Vite Frontend
 │   ├── src/
-│   │   ├── assets/                 # Brand assets and SVG icons
-│   │   ├── components/             # Reusable UI components (Navbar, Cards, Badges)
-│   │   ├── hooks/                  # Custom hooks (e.g., useHealthCheck)
-│   │   ├── layouts/                # Main application layout and navigation
-│   │   ├── pages/                  # Route views (Dashboard, Compressor, etc.)
-│   │   ├── services/               # Centralized HTTP API client
-│   │   ├── types/                  # Shared TypeScript interfaces
-│   │   ├── utils/                  # Helper utilities and formatters
-│   │   ├── App.tsx                 # Route hierarchy
-│   │   ├── index.css               # Tailwind CSS setup
-│   │   └── main.tsx                # React root mount
+│   │   ├── components/             # Reusable UI components & ui/ design library
+│   │   │   └── ui/                 # Button, Badge, Toast, MetricCard, StepIndicator, EmptyState
+│   │   ├── hooks/                  # Custom hooks: useSessionStats, useHealthCheck, useToast
+│   │   ├── layouts/                # MainLayout.tsx & Sidebar.tsx navigation shell
+│   │   ├── pages/                  # Dashboard, Compressor, Decompressor, Visualizer, HowItWorks
+│   │   ├── services/               # apiClient, compressionService, decompressionService, etc.
+│   │   ├── types/                  # TypeScript interfaces for API & compression contracts
+│   │   ├── utils/                  # Byte formatting and date utilities
+│   │   ├── App.tsx                 # Route hierarchy & ToastProvider wrapper
+│   │   ├── index.css               # Design system CSS variables & scrollbar styles
+│   │   └── main.tsx                # React DOM mount point
 │   ├── index.html                  # HTML entry point
-│   ├── package.json                # Frontend dependencies and scripts
-│   ├── tsconfig.json               # TypeScript compiler options
-│   └── vite.config.ts              # Vite bundler configuration
-├── docs/                           # Architectural & Phase Documentation
-│   ├── API-REFERENCE.md            # REST API reference and cURL examples (Phase 4)
-│   ├── ARCHITECTURE.md             # Layer responsibilities and archive spec
-│   ├── HUF-ARCHIVE-FORMAT.md       # Binary .huf format specification (Phase 3)
-│   ├── HUFFMAN-ALGORITHM.md        # Huffman algorithm deep-dive (Phase 2)
-│   └── PHASES.md                   # Systematic engineering roadmap
-├── .gitignore                      # Multi-tier gitignore rules
+│   ├── package.json                # Frontend dependencies
+│   ├── tailwind.config.js          # Design system color palette and animations
+│   └── vite.config.ts              # Vite server & proxy configuration
+├── docs/                           # Comprehensive Engineering Documentation
+│   ├── API-REFERENCE.md            # REST API reference with cURL examples
+│   ├── ARCHITECTURE.md             # In-depth architectural specification
+│   ├── HUF-ARCHIVE-FORMAT.md       # Binary .huf specification and byte layout
+│   ├── HUFFMAN-ALGORITHM.md        # Mathematical algorithm derivation
+│   ├── PHASES.md                   # Systematic engineering roadmap
+│   └── VIVA-GUIDE.md               # 29-topic university viva guide with 25 model Q&A
 └── README.md                       # Main project documentation
 ```
 
@@ -105,24 +212,23 @@ Huffman-Studio/
 
 ## Prerequisites
 
-Before running Huffman Studio, ensure you have the following installed on your system:
+Before running Huffman Studio, ensure you have:
 
 1. **Java Development Kit (JDK) 21**:
    - Check version: `java -version`
-   - Target version: OpenJDK 21 LTS
-   - If using Homebrew on macOS:
+   - Verified on OpenJDK 21 LTS.
+   - On macOS:
      ```bash
      export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
      export PATH="$JAVA_HOME/bin:$PATH"
      ```
 2. **Node.js & npm**:
-   - Node.js 18+ (verified on Node 20+)
-   - npm 9+
+   - Node.js 18+ (tested on Node 20+)
    - Check versions: `node -v` and `npm -v`
 
 ---
 
-## Installation & Setup
+## Installation & Quick Start
 
 ### 1. Clone the Repository
 ```bash
@@ -130,33 +236,16 @@ git clone https://github.com/heemanshu-021/Huffman-Studio.git
 cd Huffman-Studio
 ```
 
-### 2. Backend Setup
-Navigate to the backend directory and verify the Maven wrapper:
+### 2. Backend Setup & Run
+Navigate to `backend/` and launch the Spring Boot server:
 ```bash
 cd backend
 ./mvnw clean test
-```
-
-### 3. Frontend Setup
-Navigate to the frontend directory and install dependencies:
-```bash
-cd ../frontend
-npm install
-```
-
----
-
-## Running the Applications
-
-### Starting the Backend Server
-From the `backend/` directory:
-```bash
-# Ensure JAVA_HOME points to Java 21
 ./mvnw spring-boot:run
 ```
-The backend will launch at `http://localhost:8080`.
+The backend will start at `http://localhost:8080`.
 
-Verify health status:
+Verify health check:
 ```bash
 curl http://localhost:8080/api/health
 ```
@@ -165,48 +254,111 @@ Expected response:
 {
   "status": "UP",
   "message": "Huffman Studio Backend is operational",
-  "timestamp": "2026-11-17T22:30:00Z",
   "version": "1.0.0"
 }
 ```
 
-### Starting the Frontend Server
-From the `frontend/` directory:
+### 3. Frontend Setup & Run
+Open a second terminal window, navigate to `frontend/`, and start the development server:
 ```bash
+cd frontend
+npm install
 npm run dev
 ```
-The frontend will launch at `http://localhost:5173`. Open your browser and navigate to this URL to view the live dashboard.
+Open your browser and navigate to `http://localhost:5173`.
 
 ---
 
 ## API Documentation
 
-For full details, headers, error responses, and cURL examples, see [docs/API-REFERENCE.md](docs/API-REFERENCE.md).
+For the complete API contract, headers, error codes, and cURL examples, see [docs/API-REFERENCE.md](docs/API-REFERENCE.md).
 
 ### Core Endpoints
 
 | Method | Endpoint | Consumes | Produces | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/api/health` | *None* | `application/json` | System health status & version probe |
-| `POST` | `/api/compress` | `multipart/form-data` | `application/octet-stream` | Compresses `.txt` file into downloadable binary `.huf` with metrics in headers |
+| `POST` | `/api/compress` | `multipart/form-data` | `application/octet-stream` | Compresses `.txt` file into downloadable binary `.huf` with metrics in HTTP headers |
 | `POST` | `/api/decompress` | `multipart/form-data` | `text/plain; charset=UTF-8` | Decompresses `.huf` archive into restored `.txt` text file |
 | `POST` | `/api/analyze` | `application/json` \| `multipart/form-data` | `application/json` | Analyzes text or file for tree visualization, codes & frequencies |
 
 ---
 
-## Development Roadmap
+## Testing & Quality Assurance
 
-See [docs/PHASES.md](docs/PHASES.md), [docs/API-REFERENCE.md](docs/API-REFERENCE.md), [docs/HUF-ARCHIVE-FORMAT.md](docs/HUF-ARCHIVE-FORMAT.md), and [docs/HUFFMAN-ALGORITHM.md](docs/HUFFMAN-ALGORITHM.md) for full details:
-- **Phase 1: Foundation and Architecture** *(Completed)*
-- **Phase 2: Huffman Core Algorithm Engine** *(Completed)*
-- **Phase 3: Archive Specification & Binary File I/O** *(Completed)*
-- **Phase 4: RESTful API Layer & Spring Integration** *(Completed)*
-- **Phase 5: Frontend Interactive Workflows & Full-Stack Integration** *(Completed)*
-- **Phase 6: Tree Visualizer & Educational Walkthrough**
-- **Phase 7: Testing, Benchmarking & Release Verification**
+Huffman Studio features a multi-tiered testing strategy:
+
+### 1. Backend Automated Tests (JUnit 5 & MockMvc)
+```bash
+cd backend
+./mvnw clean test
+```
+- **188 automated tests** passing with 0 failures:
+  - Unit tests: `FrequencyCounterTest`, `HuffmanTreeBuilderTest`, `HuffmanCodeGeneratorTest`, `HuffmanEncoderTest`, `HuffmanDecoderTest`.
+  - Archive bitstream tests: `BitWriterReaderTest`, `HuffmanArchivePersistenceTest`.
+  - Round-trip fidelity: `HuffmanArchiveRoundTripTest` (35 test cases asserting $100\%$ byte-for-byte fidelity across ASCII, Unicode, code files, and repetitive corpuses).
+  - Defensive corruption tests: `HuffmanArchiveCorruptionTest` (corrupt magic, tampered CRC-32, truncated headers).
+  - MockMvc Controller tests: `CompressionControllerTest`, `DecompressionControllerTest`, `AnalysisControllerTest`, `HealthControllerTest`.
+
+### 2. Frontend Build Verification
+```bash
+cd frontend
+npm run build
+```
+- `tsc -b && vite build` compiles cleanly with **0 TypeScript errors**.
+
+### 3. End-to-End Live Round-Trip Verification
+A dedicated automated E2E test suite (`scratch/e2e_test_suite.py`) verifies live HTTP round trips against a running server:
+- Normal English prose ($100\%$ byte match)
+- 50 KB large text file ($45.67\%$ space savings, $100\%$ byte match)
+- Hindi Devanagari text ($100\%$ byte match)
+- Chinese ideographs ($100\%$ byte match)
+- Arabic script ($100\%$ byte match)
+- Japanese kana/kanji ($100\%$ byte match)
+- Emoji pictographs ($100\%$ byte match)
+- Mixed multilingual text with symbols ($100\%$ byte match)
+- Single character and repetitive sequences ($100\%$ byte match)
+- Empty text file ($29\text{-byte}$ empty archive $\to$ restored $0\text{-byte}$ file)
+- Corrupted archive diagnostics (bad magic $\to 422$, flipped bit CRC mismatch $\to 422$, truncated file $\to 422$, invalid file extension $\to 400$)
+
+---
+
+## Viva & Technical Evaluation Guide
+
+For university examinations, project defense, and viva voce preparations, refer to the comprehensive guide:
+📖 **[docs/VIVA-GUIDE.md](docs/VIVA-GUIDE.md)**
+
+It covers:
+- Core algorithm mechanics (Greedy choice, PriorityQueue min-heap, prefix-free codes).
+- Authentic bit packing via `BitWriter` and `BitReader`.
+- `.huf` binary layout and 29-byte fixed header offsets.
+- Mathematical justification for container overhead on small inputs.
+- Layered Java 21 Spring Boot architecture and DTO separation.
+- **Top 25 frequently asked viva questions with model answers**.
+
+---
+
+## Known Limitations
+
+1. **Two-Pass Static Compression**: Static Huffman coding requires scanning the text once to compute frequencies and once to encode. It does not perform one-pass streaming like Adaptive Huffman (FGK/Vitter).
+2. **Container Format**: The Version 1 `.huf` format is designed for single text files; directory recursion or multi-file archiving is not supported in V1.
+3. **High-Entropy Data**: Highly random data or pre-compressed formats (ZIP, JPEG) cannot be significantly compressed by Huffman coding alone due to Shannon entropy limits.
+
+---
+
+## Engineering Roadmap
+
+- [x] **Phase 1: Foundation and Architecture** — Independent React and Spring Boot scaffolding, health check probe, CORS configuration.
+- [x] **Phase 2: Huffman Core Algorithm Engine** — Pure Java Unicode frequency counting, Min-Heap PriorityQueue, tree construction, prefix code generation.
+- [x] **Phase 3: Archive Specification & Binary File I/O** — `BitWriter`/`BitReader`, 29-byte `.huf` binary container, CRC-32 integrity validation.
+- [x] **Phase 4: RESTful API Layer & Spring Integration** — Multipart upload/download endpoints, analysis API, centralized exception handling.
+- [x] **Phase 5: Full-Stack Integration** — Connected React pages to real Java backend, session analytics, transparent container overhead notices.
+- [x] **Phase 6: Premium UI/UX Transformation** — Modern developer workspace, collapsible sidebar, UI component library, SVG pan/zoom tree visualizer.
+- [x] **Phase 7: Quality Assurance, Bug Fixes, Documentation & Release** — Inconsistency fixes (`HUFN` magic alignment), comprehensive viva guide, complete E2E testing, production package verification.
 
 ---
 
 ## License
 
-This project is prepared for academic study and computer science university coursework.
+This project is prepared for academic study, computer science university coursework, and portfolio demonstration.
+Developed by [heemanshu-021](https://github.com/heemanshu-021).
