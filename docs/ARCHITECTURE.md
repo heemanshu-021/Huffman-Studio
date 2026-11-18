@@ -150,7 +150,7 @@ To achieve genuine text compression without external dependencies or ephemeral s
 +-----------------------------------------------------------------------------+
 | Offset (Bytes) | Field Name        | Type     | Description                 |
 +----------------+-------------------+----------+-----------------------------+
-| 0 .. 3         | Magic Identifier  | 4 Bytes  | ASCII "HUFF" (0x48554646)   |
+| 0 .. 3         | Magic Identifier  | 4 Bytes  | ASCII "HUFN" (0x4855464E)   |
 | 4              | Format Version    | 1 Byte   | 0x01                        |
 | 5              | Padding Bit Count | 1 Byte   | Unused bits in final byte   |
 | 6 .. 7         | Tree Table Size   | 2 Bytes  | Number of unique symbols    |

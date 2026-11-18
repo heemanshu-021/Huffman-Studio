@@ -9,7 +9,7 @@ This document outlines the systematic, phased engineering roadmap for **Huffman 
 ```
 +-----------------------------------------------------------------------------------+
 |  PHASE 1: Foundation & Architecture (Current)                                     |
-|  - Independent frontend (React 19, TS, Vite, Tailwind) & backend (Java 21, Spring)|
+|  - Independent frontend (React 18, TS, Vite, Tailwind) & backend (Java 21, Spring)|
 |  - Health check REST endpoint, CORS, Maven wrapper, and clean layer scaffolds     |
 +-----------------------------------------+-----------------------------------------+
                                           |

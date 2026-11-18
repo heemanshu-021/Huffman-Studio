@@ -74,7 +74,7 @@ const ALGORITHM_STEPS: Step[] = [
     icon: FileArchive,
     summary: 'Write magic + header + tree + payload',
     detail:
-      'The archive is a self-contained binary file. The header contains: magic bytes HUFF (0x48554646), format version (1 byte), unique code point count (4 bytes), total bit count (8 bytes), tree serialization byte count (4 bytes), padding count (1 byte), and CRC-32 checksum (4 bytes). Then the serialized Huffman tree (preorder traversal), then the encoded payload bytes.',
+      'The archive is a self-contained binary file. The header contains: magic bytes HUFN (0x4855464E), format version (1 byte), unique code point count (4 bytes), total bit count (8 bytes), tree serialization byte count (4 bytes), padding count (1 byte), and CRC-32 checksum (4 bytes). Then the serialized Huffman tree (preorder traversal), then the encoded payload bytes.',
   },
   {
     num: '07',
@@ -160,7 +160,7 @@ export const HowItWorksPage: React.FC = () => {
         <div className="overflow-x-auto">
           <div className="flex items-stretch gap-0 min-w-max text-[10px] font-mono rounded-lg overflow-hidden border border-slate-700/50">
             {[
-              { label: 'Magic', bytes: '4B', color: 'bg-emerald-900/60 text-emerald-300', value: '0x48554646' },
+              { label: 'Magic', bytes: '4B', color: 'bg-emerald-900/60 text-emerald-300', value: '0x4855464E (HUFN)' },
               { label: 'Version', bytes: '1B', color: 'bg-blue-900/60 text-blue-300', value: '0x01' },
               { label: 'CodePoints', bytes: '4B', color: 'bg-purple-900/60 text-purple-300', value: 'uint32' },
               { label: 'BitCount', bytes: '8B', color: 'bg-indigo-900/60 text-indigo-300', value: 'int64' },

@@ -291,7 +291,7 @@ export const DashboardPage: React.FC = () => {
           <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Archive Spec (.huf v1)</h4>
           <div className="space-y-1 font-mono text-xs">
             {[
-              { label: 'Magic', value: '0x48554646 (HUFF)', em: true },
+              { label: 'Magic', value: '0x4855464E (HUFN)', em: true },
               { label: 'Version', value: '0x01', em: false },
               { label: 'Header', value: '29 Bytes Fixed', em: false },
               { label: 'Integrity', value: 'CRC-32 IEEE 802.3', em: false },

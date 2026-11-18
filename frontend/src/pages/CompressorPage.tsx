@@ -383,7 +383,7 @@ export const CompressorPage: React.FC = () => {
             </h4>
             <div className="space-y-1 text-xs font-mono">
               {[
-                ['Magic Number', '0x48554646 (HUFF)', true],
+                ['Magic Number', '0x4855464E (HUFN)', true],
                 ['Version', '0x01', false],
                 ['Header Size', '29 Bytes Fixed', false],
                 ['Integrity', 'CRC-32 IEEE 802.3', false],
